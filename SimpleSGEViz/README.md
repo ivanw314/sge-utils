@@ -6,49 +6,19 @@ A command-line pipeline for generating standard visualization figures from Satur
 
 ## Setup
 
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/ivanw314/SimpleSGEViz.git
-cd SimpleSGEViz
-```
-
-### 2. Create and activate a virtual environment (recommended)
-
-```bash
-python -m venv .venv
-source .venv/bin/activate      # macOS / Linux
-.venv\Scripts\activate         # Windows
-```
-
-Or with conda:
-
-```bash
-conda create -n sgeviz -c conda-forge python=3.11 tzdata
-conda activate sgeviz
-```
-
-> If you see a `tzdata` unsatisfiable error, your conda index is likely stale. Run `conda update -n base conda && conda clean --all`, then retry the create command.
-
-### 3. Install the package
-
-**Python 3.9 or higher is required** (the conda example above uses 3.11; any 3.9+ version works).
+With the `sge-utils` conda environment active, install the package from the `SimpleSGEViz` directory:
 
 ```bash
 pip install -e .
 ```
 
-This installs all dependencies, including PNG/SVG export support (`vl-convert-python`) and Excel output support (`openpyxl`).
+After a `git pull`, changes are picked up automatically — no reinstall needed.
 
-After a `git pull`, changes are picked up automatically — no reinstall needed. Re-run `pip install -e .` only if `pyproject.toml` changes (e.g. new dependencies were added).
-
-### 4. Verify the setup
+Verify the setup:
 
 ```bash
 sgeviz --help
 ```
-
-You should see the usage message. If you get a "command not found" error, make sure your virtual environment is active. If you get an import error, check that the install step completed without errors.
 
 ---
 
