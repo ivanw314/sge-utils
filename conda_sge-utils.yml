@@ -1,0 +1,41 @@
+name: sge-utils
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+
+dependencies:
+  # ── Python ───────────────────────────────────────────
+  - python=3.11
+
+  # ── Core data science ────────────────────────────────
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+  - openpyxl
+
+  # ── Visualisation ────────────────────────────────────
+  - altair
+  - matplotlib
+  - seaborn
+  - vega_datasets          # useful sample datasets for altair examples
+
+  # ── Bioinformatics ───────────────────────────────────
+  - pysam
+  - pyfaidx
+  - biopython
+  - samtools               # CLI available in env (used by pysam under the hood)
+  - bedtools 
+  - pybedtools              # essential for genomic interval operations
+
+  # ── Notebook + kernel ────────────────────────────────
+  - jupyterlab
+  - ipykernel
+  - ipywidgets
+
+  # ── Utilities ────────────────────────────────────────
+  - tqdm                   # progress bars
+  - rich                   # pretty terminal output
+  - natsort
+  - vl-convert-python
