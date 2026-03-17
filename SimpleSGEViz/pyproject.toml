@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sgeviz"
+version = "0.1.0"
+description = "Command-line pipeline for SGE fitness score visualization"
+requires-python = ">=3.9"
+dependencies = [
+    "pandas>=1.5",
+    "numpy>=2.0",
+    "altair>=5.0",
+    "natsort>=8.0",
+    "openpyxl>=3.0",
+    "vl-convert-python>=1.0",
+]
+
+[project.scripts]
+sgeviz = "pipeline:main"
+
+[tool.setuptools.packages.find]
+where   = ["."]
+include = ["sgeviz*"]
+
+[tool.setuptools]
+py-modules = ["pipeline"]
