@@ -47,6 +47,7 @@ def make_plot(df: pd.DataFrame, gene: str = "") -> alt.Chart:
     df["rep"] = df["rep"].map(_REP_MAP).fillna(df["rep"])
     print(f'This is prior to grouping {df.columns}')
     df = df.groupby('target').apply(recode_reps).reset_index(drop = True)
+    df["target"] = df["target_rep"].transform(lambda x: x.split("X")[1].split("_")[0])
     print(f'This is after grouping {df.columns}')
     sort_order = sorted(df["target"].unique().tolist(), key=_natsort_key)
 
