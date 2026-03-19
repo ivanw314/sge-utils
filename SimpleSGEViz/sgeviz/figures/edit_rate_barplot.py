@@ -45,9 +45,9 @@ def make_plot(df: pd.DataFrame, gene: str = "") -> alt.Chart:
 
     # Map replicate combos to display labels; fall back to raw string
     df["rep"] = df["rep"].map(_REP_MAP).fillna(df["rep"])
-
+    print(f'This is prior to grouping {df.columns}')
     df = df.groupby('target').apply(recode_reps).reset_index(drop = True)
-    print(df.columns)
+    print(f'This is after grouping {df.columns}')
     sort_order = sorted(df["target"].unique().tolist(), key=_natsort_key)
 
     plot = (
