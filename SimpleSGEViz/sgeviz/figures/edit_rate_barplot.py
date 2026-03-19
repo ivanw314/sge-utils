@@ -43,12 +43,11 @@ def make_plot(df: pd.DataFrame, gene: str = "") -> alt.Chart:
     df["target"] = df["target_rep"].transform(lambda x: x.split("X")[1].split("_")[0])
     df["rep"] = df["target_rep"].transform(lambda x: x.split("X")[1].split("_")[1])
 
-    # Map replicate combos to display labels; fall back to raw string
+    # Map replicate combos to display labels; fall back to raw string. 2 replicate experiments default to rep 1 and 2
     df["rep"] = df["rep"].map(_REP_MAP).fillna(df["rep"])
-    print(f'This is prior to grouping {df.columns}')
-    df = df.groupby('target').apply(recode_reps).reset_index(drop = True)
+    df = df.groupby('target', group_keys=False).apply(recode_reps, include_groups=False).reset_index(drop=True)
     df["target"] = df["target_rep"].transform(lambda x: x.split("X")[1].split("_")[0])
-    print(f'This is after grouping {df.columns}')
+
     sort_order = sorted(df["target"].unique().tolist(), key=_natsort_key)
 
     plot = (
