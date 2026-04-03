@@ -131,6 +131,14 @@ def load_cartoon(files: dict):
     exon_df = xl.parse("exon_coords")
     lib_df = xl.parse("lib_coords") if "lib_coords" in xl.sheet_names else None
     meta_df = xl.parse("metadata")
+
+    # Normalise to genomic order (start < end) regardless of how coordinates
+    # were entered in the file (e.g. transcript order for minus-strand genes).
+    for df in ([exon_df] + ([lib_df] if lib_df is not None else [])):
+        mask = df["start"] > df["end"]
+        if mask.any():
+            df.loc[mask, ["start", "end"]] = df.loc[mask, ["end", "start"]].values
+
     return exon_df, lib_df, meta_df
 
 
