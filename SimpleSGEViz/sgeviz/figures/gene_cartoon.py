@@ -193,7 +193,7 @@ def _make_exon_track(
     _SW = 0.8
 
     def _base(chart: alt.Chart) -> alt.Chart:
-        return chart.properties(width=chart_width, height=TRACK_H)
+        return chart.properties(height=TRACK_H)
 
     layers: list[alt.Chart] = []
 
@@ -392,7 +392,7 @@ def _make_library_track(
         return alt.layer()
 
     def _base(chart: alt.Chart) -> alt.Chart:
-        return chart.properties(width=chart_width, height=TRACK_H)
+        return chart.properties(height=TRACK_H)
 
     # ── Coverage rectangles ───────────────────────────────────────────────
     max_depth = max(r["depth"] for r in rects)
@@ -617,7 +617,7 @@ def make_exon_cartoon(
         atg_vgc, stop_vgc,
         x_scale, chart_width, meta["exon_color"], fontsize,
     )
-    return track.configure_axis(grid=False).configure_view(stroke=None)
+    return track.properties(width=chart_width).configure_axis(grid=False).configure_view(stroke=None)
 
 
 def make_library_cartoon(
@@ -690,6 +690,7 @@ def make_library_cartoon(
 
     return (
         alt.vconcat(exon_track, lib_track, spacing=8)
+        .properties(width=chart_width)
         .configure_axis(grid=False)
         .configure_view(stroke=None)
     )
