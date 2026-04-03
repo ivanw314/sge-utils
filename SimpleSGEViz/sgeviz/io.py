@@ -132,11 +132,24 @@ def load_cartoon(files: dict):
     lib_df = xl.parse("lib_coords") if "lib_coords" in xl.sheet_names else None
     meta_df = xl.parse("metadata")
 
-    # Normalise to genomic order (start < end) regardless of how coordinates
-    # were entered in the file (e.g. transcript order for minus-strand genes).
-    for df in ([exon_df] + ([lib_df] if lib_df is not None else [])):
+    # Coordinates must be in standard genomic order (start < end).
+    # Warn and correct any rows where start > end so the user knows their file
+    # is non-standard.
+    for sheet_name, df in [("exon_coords", exon_df)] + (
+        [("lib_coords", lib_df)] if lib_df is not None else []
+    ):
         mask = df["start"] > df["end"]
         if mask.any():
+            import warnings
+            warnings.warn(
+                f"Cartoon file '{path.name}': {mask.sum()} row(s) in sheet "
+                f"'{sheet_name}' have start > end. Coordinates should be in "
+                f"standard genomic order (start < end) regardless of strand. "
+                f"The affected rows have been automatically corrected by swapping "
+                f"start and end.",
+                UserWarning,
+                stacklevel=2,
+            )
             df.loc[mask, ["start", "end"]] = df.loc[mask, ["end", "start"]].values
 
     return exon_df, lib_df, meta_df
