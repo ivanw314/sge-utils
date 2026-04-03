@@ -12,6 +12,12 @@ _REP_MAP = {
 
 _REP_ORDER = ["Rep. 1", "Rep. 2", "Rep. 3"]
 
+def recode_reps(df):
+
+    if len(df) != 3:
+        df = df.assign(rep=['Rep. 1', 'Rep. 2'])
+
+    return df
 
 def _natsort_key(s: str) -> list:
     """Natural sort key: splits on digit runs so '10A' sorts after '9A'."""
@@ -37,8 +43,10 @@ def make_plot(df: pd.DataFrame, gene: str = "") -> alt.Chart:
     df["target"] = df["target_rep"].transform(lambda x: x.split("X")[1].split("_")[0])
     df["rep"] = df["target_rep"].transform(lambda x: x.split("X")[1].split("_")[1])
 
-    # Map replicate combos to display labels; fall back to raw string
+    # Map replicate combos to display labels; fall back to raw string. 2 replicate experiments default to rep 1 and 2
     df["rep"] = df["rep"].map(_REP_MAP).fillna(df["rep"])
+    df = df.groupby('target', group_keys=False).apply(recode_reps, include_groups=False).reset_index(drop=True)
+    df["target"] = df["target_rep"].transform(lambda x: x.split("X")[1].split("_")[0])
 
     sort_order = sorted(df["target"].unique().tolist(), key=_natsort_key)
 

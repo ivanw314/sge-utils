@@ -174,7 +174,6 @@ def _make_exon_track(
     atg_pos: int,
     stop_pos: int,
     x_scale: alt.Scale,
-    chart_width: int,
     exon_color: str,
     fontsize: int,
 ) -> alt.Chart:
@@ -193,7 +192,7 @@ def _make_exon_track(
     _SW = 0.8
 
     def _base(chart: alt.Chart) -> alt.Chart:
-        return chart.properties(width=chart_width, height=TRACK_H)
+        return chart.properties(height=TRACK_H)
 
     layers: list[alt.Chart] = []
 
@@ -361,9 +360,9 @@ def _make_library_track(
     lib_df: pd.DataFrame,
     segments: list[dict],
     x_scale: alt.Scale,
-    chart_width: int,
     lib_color: str,
     fontsize: int,
+    y_offset: int = 0,
 ) -> alt.Chart:
     """Build the library-amplicon coverage track (unconfigured, for composing).
 
@@ -378,8 +377,8 @@ def _make_library_track(
     as a single "N Variants Designed" label.
     """
     # ── Layout ───────────────────────────────────────────────────────────
-    BRACKET_Y = 20   # y of horizontal bracket arms
-    V_PAD     = 32   # top of library band
+    BRACKET_Y = 20 + y_offset   # y of horizontal bracket arms
+    V_PAD     = 32 + y_offset   # top of library band
     TICK_H    = V_PAD - BRACKET_Y - 5   # ticks stop 5px above the band top
     LANE_H    = 26
     BOT_PAD   = 8
@@ -392,7 +391,7 @@ def _make_library_track(
         return alt.layer()
 
     def _base(chart: alt.Chart) -> alt.Chart:
-        return chart.properties(width=chart_width, height=TRACK_H)
+        return chart.properties(height=TRACK_H)
 
     # ── Coverage rectangles ───────────────────────────────────────────────
     max_depth = max(r["depth"] for r in rects)
@@ -499,6 +498,8 @@ def _make_library_track(
 def _parse_meta(metadata_df: pd.DataFrame, exon_df: pd.DataFrame) -> dict:
     meta = dict(zip(metadata_df["type"].str.lower(), metadata_df["info"]))
     strand = str(meta.get("strand", "plus")).strip().lower()
+    if strand == "-":
+        strand = "minus"
     # For minus-strand genes the 5′ end (ATG) is at the highest genomic
     # coordinate; adjust the fallback defaults accordingly.
     if strand == "minus":
@@ -594,6 +595,12 @@ def make_exon_cartoon(
         fontsize: base font size for all text labels; individual elements
             scale relative to this value.
     """
+    bad = exon_df[exon_df["start"] > exon_df["end"]]
+    if not bad.empty:
+        raise ValueError(
+            f"exon_df rows have start > end (coordinates must be in genomic order, "
+            f"start < end regardless of strand):\n{bad}"
+        )
     meta = _parse_meta(metadata_df, exon_df)
     if exon_color is not None:
         meta["exon_color"] = exon_color
@@ -609,13 +616,13 @@ def make_exon_cartoon(
     exon_segs = [s for s in segments if s["kind"] == "exon"]
     utr_segs = [s for s in segments if s["kind"] == "utr"]
 
-    x_scale = alt.Scale(domain=[-_LEFT_MARGIN, total_vw])
     chart_width = width + _LEFT_MARGIN
+    x_scale = alt.Scale(domain=[-_LEFT_MARGIN, total_vw], range=[0, chart_width])
 
     track = _make_exon_track(
         exon_segs, utr_segs, segments, total_vw,
         atg_vgc, stop_vgc,
-        x_scale, chart_width, meta["exon_color"], fontsize,
+        x_scale, meta["exon_color"], fontsize,
     )
     return track.configure_axis(grid=False).configure_view(stroke=None)
 
@@ -659,6 +666,18 @@ def make_library_cartoon(
         fontsize: base font size for all text labels; individual elements
             scale relative to this value.
     """
+    bad_exon = exon_df[exon_df["start"] > exon_df["end"]]
+    if not bad_exon.empty:
+        raise ValueError(
+            f"exon_df rows have start > end (coordinates must be in genomic order, "
+            f"start < end regardless of strand):\n{bad_exon}"
+        )
+    bad_lib = lib_df[lib_df["start"] > lib_df["end"]]
+    if not bad_lib.empty:
+        raise ValueError(
+            f"lib_df rows have start > end (coordinates must be in genomic order, "
+            f"start < end regardless of strand):\n{bad_lib}"
+        )
     meta = _parse_meta(metadata_df, exon_df)
     if exon_color is not None:
         meta["exon_color"] = exon_color
@@ -676,20 +695,27 @@ def make_library_cartoon(
     exon_segs = [s for s in segments if s["kind"] == "exon"]
     utr_segs = [s for s in segments if s["kind"] == "utr"]
 
-    x_scale = alt.Scale(domain=[-_LEFT_MARGIN, total_vw])
     chart_width = width + _LEFT_MARGIN
+    x_scale = alt.Scale(domain=[-_LEFT_MARGIN, total_vw], range=[0, chart_width])
+
+    _EXON_TRACK_H = 97
+    _SPACING = 8
+    _LIB_TRACK_H = 32 + 26 + 8  # V_PAD + LANE_H + BOT_PAD
+    total_h = _EXON_TRACK_H + _SPACING + _LIB_TRACK_H
 
     exon_track = _make_exon_track(
         exon_segs, utr_segs, segments, total_vw,
         atg_vgc, stop_vgc,
-        x_scale, chart_width, meta["exon_color"], fontsize,
+        x_scale, meta["exon_color"], fontsize,
     )
     lib_track = _make_library_track(
-        lib_df_vgc, segments, x_scale, chart_width, meta["lib_color"], fontsize,
+        lib_df_vgc, segments, x_scale, meta["lib_color"], fontsize,
+        y_offset=_EXON_TRACK_H + _SPACING,
     )
 
     return (
-        alt.vconcat(exon_track, lib_track, spacing=8)
+        alt.layer(*exon_track.layer, *lib_track.layer)
+        .properties(height=total_h)
         .configure_axis(grid=False)
         .configure_view(stroke=None)
     )

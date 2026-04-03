@@ -95,6 +95,7 @@ Multiple genes can be processed in a single run by placing all their files in th
 | `*{gene}*domain*` | Protein domain annotations (CSV or Excel). Adds a domain cartoon strip above the AA heatmap. File name matching is case-insensitive. See [Domain annotation file format](#domain-annotation-file-format) below. |
 | `*{gene}*editrates*` | Library edit rates (tab-delimited `.tsv`). File name matching is case-insensitive. See [Edit rates file format](#edit-rates-file-format) below. |
 | `*{gene}*targets*` | Library targets (tab-delimited `.tsv` with `editstart` and `editstop` columns). When present, the edit coordinate ranges are used as library amplicons for the cartoon library track, triggering `{gene}_library_cartoon`. File name matching is case-insensitive. See [Targets file format](#targets-file-format) below. |
+| `*{gene}*cartoon*` | Gene cartoon Excel file (`.xlsx`) with exon/library coordinates and metadata. Overrides the automatic Ensembl fetch. See [Gene cartoon file format](#gene-cartoon-file-format) below. |
 | `*{gene}*vep*` | VEP output — Excel (`.xlsx`) or tab-delimited text (`.txt`). AlphaMissense, REVEL, CADD, and SpliceAI scores are extracted and merged into the variant data, enabling the VEP predictor sub-panels in the AA heatmap. File name matching is case-insensitive. See [VEP file format](#vep-file-format) below. |
 
 ### Required columns in `*allscores.tsv`
@@ -270,6 +271,43 @@ target	chrom	editstart	editstop	ampstart	ampstop	...
 CTCF_X3A	chr16	67610814	67610930	67610735	67610994	...
 CTCF_X3B	chr16	67610911	67611033	67610857	67611109	...
 ```
+
+---
+
+## Gene cartoon file format
+
+A gene cartoon file overrides the automatic Ensembl fetch and provides exon and library coordinates directly. Place an Excel file matching `*{gene}*cartoon*` (e.g. `BRCA1cartoon.xlsx`) in the input directory.
+
+The file must contain the following sheets:
+
+### `exon_coords` sheet (required)
+
+| Column | Description |
+|---|---|
+| `exon` | Exon label (e.g. `1`, `2`, `X1`) |
+| `start` | Genomic start coordinate (must be < `end`) |
+| `end` | Genomic end coordinate (must be > `start`) |
+
+### `lib_coords` sheet (optional)
+
+When present, a library amplicon track is drawn below the exon track and `{gene}_library_cartoon` is produced instead of `{gene}_exon_cartoon`.
+
+| Column | Description |
+|---|---|
+| `start` | Genomic start of the amplicon (must be < `end`) |
+| `end` | Genomic end of the amplicon (must be > `start`) |
+
+### `metadata` sheet (required)
+
+| `type` | `info` | Description |
+|---|---|---|
+| `atg` | e.g. `66995417` | Genomic position of the start codon |
+| `stop` | e.g. `66988370` | Genomic position of the stop codon |
+| `strand` | `plus`, `+`, `minus`, or `-` | Gene strand (`plus`/`+` is the default) |
+| `exon_color` | e.g. `#2E86C1` | Fill color for exon rectangles (optional) |
+| `lib_color` | e.g. `#888888` | Fill color for library amplicons (optional) |
+
+**Coordinate convention:** all `start` and `end` values must be in standard genomic order (`start < end`) regardless of strand. If any rows have `start > end`, the pipeline will emit a warning and automatically swap the values.
 
 ---
 
