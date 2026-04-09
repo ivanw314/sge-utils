@@ -56,5 +56,8 @@ log "Writing edit rate file"
 for f in $input_directory; do
     tail -1 "$f" | awk -v OFS='\t' '{ print $1, ($10 + $11) / $3 }' >> "$output_file"
 done
+
+echo -e "target_rep\tedit_rate" | cat - $output_file
+
 log "Done!"
 
