@@ -8,8 +8,9 @@ A collection of tools for Saturation Genome Editing (SGE) workflows, covering ol
 
 ```
 sge-utils/
-├── notebook_utils/       # Jupyter notebooks for SGE library design
-└── SimpleSGEViz/         # CLI pipeline for SGE fitness score visualization
+├── notebook_utils/           # Jupyter notebooks for SGE library design
+├── SimpleSGEViz/             # CLI pipeline for SGE fitness score visualization
+└── useful_shell_scripts/     # Standalone bash utilities for SGE 
 ```
 
 ---
@@ -109,6 +110,7 @@ The pipeline auto-detects genes in the input directory and produces figures for 
 
 ### Required inputs
 
+
 | File pattern | Description |
 |---|---|
 | `*{gene}allscores.tsv` | Combined SNV and 3bp deletion fitness scores |
@@ -117,3 +119,34 @@ The pipeline auto-detects genes in the input directory and produces figures for 
 | `*{gene}delcounts.tsv` | Per-replicate 3bp deletion read counts |
 
 Optional files (ClinVar, gnomAD, domain annotations, VEP output, edit rates, targets) are auto-detected by filename. See [SimpleSGEViz/README.md](SimpleSGEViz/README.md) for full input/output specifications.
+
+---
+
+## useful_shell_scripts
+
+Standalone bash scripts for common SGE data processing tasks.
+
+### GetEditRates.sh
+
+Computes per-target edit rates from readstats TSV files and writes them to a single output TSV.
+
+**Usage:**
+
+```bash
+./GetEditRates.sh -i <input_directory> -o <output_directory>
+```
+
+**Arguments:**
+
+| Flag | Description |
+|---|---|
+| `-i` | Path to the input directory (expects `*_X*_R*_D05*readstats.tsv` files inside) |
+| `-o` | Path to the output directory where the edit rate file will be written |
+
+The gene name and sample date are parsed from the input path. The output file is named `{gene}.editrates.{date}.tsv`.
+
+**Output format:**
+
+A tab-separated file with columns:
+- `target_rep` — target/replicate identifier (column 1 from the readstats file)
+- `edit_rate` — computed as `(col10 + col11) / col3` from each readstats file
