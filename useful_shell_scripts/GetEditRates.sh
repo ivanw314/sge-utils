@@ -49,8 +49,8 @@ log "Grabbing gene name and date from input"
 gene_name=$(echo "$input" | cut -d'.' -f2)
 sample_date=$(echo "$input" | cut -d'/' -f8 | cut -d'.' -f1)
 
-input_directory="${input}${gene_name}_X*_R*_D05*readstats.tsv"
-output_file="${output}${gene_name}.editrates.${sample_date}.tsv"
+input_directory="${input}/${gene_name}_X*_R*_D05*readstats.tsv"
+output_file="${output}/${sample_date}_${gene_name}.editrates.tsv"
 
 log "Writing edit rate file"
 shopt -s nullglob
