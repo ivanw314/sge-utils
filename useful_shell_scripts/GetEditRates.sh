@@ -49,12 +49,18 @@ log "Grabbing gene name and date from input"
 gene_name=$(echo "$input" | cut -d'.' -f2)
 sample_date=$(echo "$input" | cut -d'/' -f8 | cut -d'.' -f1)
 
-input_directory="${input}/${gene_name}_X*_R*_D05*readstats.tsv"
-output_file="${output}/${gene_name}.editrates.${sample_date}.tsv"
+input_directory="${input}${gene_name}_X*_R*_D05*readstats.tsv"
+output_file="${output}${gene_name}.editrates.${sample_date}.tsv"
 
 log "Writing edit rate file"
+shopt -s nullglob
+files=($input_directory)
+if [[ ${#files[@]} -eq 0 ]]; then
+    echo "No readstats files found matching: $input_directory"
+    exit 1
+fi
 echo -e "target_rep\tedit_rate" > "$output_file"
-for f in $input_directory; do
+for f in "${files[@]}"; do
     tail -1 "$f" | awk -v OFS='\t' '{ print $1, ($10 + $11) / $3 }' >> "$output_file"
 done
 
