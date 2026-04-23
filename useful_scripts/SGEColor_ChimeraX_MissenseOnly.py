@@ -1,6 +1,42 @@
+"""
+SGEColor_ChimeraX_MissenseOnly.py
+==================================
+Colors a protein ribbon structure in ChimeraX by per-residue SGE (Saturating Genome Editing)
+scores, using only missense variants. Scores are aggregated per amino acid position and mapped
+onto a white (benign/neutral) → red (damaging) color scale clamped to [-0.2, 0].
+
+USAGE
+-----
+In the ChimeraX command line:
+    runscript /path/to/SGEColor_ChimeraX_MissenseOnly.py
+
+INTERACTIVE DIALOGS (shown at runtime)
+---------------------------------------
+1. PDB ID          — prompted only if no structure is currently loaded.
+                     If a model is already open, that structure is used as-is.
+2. SGE score file  — file picker for an Excel (.xlsx) SGE score table.
+                     The file must contain a sheet named 'scores' with columns:
+                       variant_qc_flag, consequence, amino_acid_change, score,
+                       RNA_consequence (optional, used by the RNA filter below)
+3. Chain selection — dropdown populated from the chains in the loaded structure.
+4. RNA filter      — (optional) enter a value (e.g. 'low') to exclude variants
+                     where RNA_consequence equals that value. Leave blank to skip.
+5. Add another?    — repeat steps 2–4 to color additional chains in one run.
+
+CONFIGURATION (edit at top of script)
+---------------------------------------
+  analysis_type  'med' | 'mean' | 'min'   Aggregation method per residue (default: 'med')
+  show_legend    True | False              Show colorbar legend window (default: False)
+  save_legend    True | False              Prompt to save legend as PNG (default: False)
+  dna_style      'stubs'|'slab'|'fill'    ssDNA display style (default: 'stubs')
+                 |'atoms'
+"""
+
 from chimerax.core.commands import run
 import subprocess
 import sys
+import os
+from Qt.QtWidgets import QInputDialog, QFileDialog
 
 #Install required packages into ChimeraX's Python environment if not already present
 for _pkg in ['pandas', 'openpyxl', 'matplotlib']:
@@ -15,63 +51,23 @@ import matplotlib.cm as cm
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 
-#This script generates colored ribbon structures in ChimeraX based on SGE scores.
-#ChimeraX port of BCDX2_colorPyMOL_MIS_only.py
-
-#To run: open ChimeraX, then use the command:
-#   runscript /path/to/BCDX2_colorChimeraX_MIS_only.py
-
-
-analysis_type = 'med' #Specify whether to color based on 'med' or 'min' SGE scores
-
-rad51d_version_date = '20260407' #Version date for RAD51D SGE score file, should match version date used in BCDX2_MakeFinalDataTable.ipynb
-xrcc2_version_date = '20260122' #Version date for XRCC2 SGE score file, should match version date used in BCDX2_MakeFinalDataTable.ipynb
-
-sge_data = {'RAD51D': f'/Users/ivan/Documents/GitHub/RAD51D_figs/Data/final_tables/supplementary_file_1_RAD51D_SGE_final_table_{rad51d_version_date}.xlsx',
-     'XRCC2': f'/Users/ivan/Documents/GitHub/RAD51D_figs/Data/final_tables/supplementary_file_1_XRCC2_SGE_final_table_{xrcc2_version_date}.xlsx'
-    }
-
-pdb = '8GBJ' #PDB structure to use
-
+analysis_type = 'med' #Specify whether to color based on 'med', 'mean', or 'min' SGE scores
 show_legend = False #Whether to show the legend figure
 save_legend = False #Whether to save the legend figure
-filter_rna_low = True #Whether to filter out RAD51D variants with RNA_consequence == 'low'
 dna_style = 'stubs' #ssDNA display style: 'stubs', 'slab', 'fill', or 'atoms'. ('ladder' requires dsDNA and won't work here)
 
-#The chains are specified as follows based on user-provided PDB
-if pdb == '8OUZ':
-    chains = {'RAD51D': 'C',
-            'XRCC2': 'D'}
-elif pdb == '8GBJ':
-    chains = {'RAD51D': 'D',
-            'XRCC2': 'X'}
 
-
-def region_residues(gene): #Takes gene input and creates the respective residue numbers
-    region_residues = [] #Initializes empty list for region residues
-
-    if gene == 'RAD51D':
-        for i in range(1, 329):
-            region_residues.append(i)
-    elif gene == 'XRCC2':
-        for i in range(1, 281):
-            region_residues.append(i)
-
-    return region_residues
-
-def read_scores(file, region_resi, gene): #Reads score file
+def read_scores(file, rna_filter_val=None): #Reads score file
     df = pd.read_excel(file, sheet_name='scores') #Reads in score file
 
     df = df.loc[df['variant_qc_flag'] != 'WARN'] #Filters out variants with WARN flag
-    df = df.rename(columns = {'consequence': 'Consequence', 'amino_acid_change': 'AAsub', 'score': 'snv_score'})
+    df = df.rename(columns={'consequence': 'Consequence', 'amino_acid_change': 'AAsub', 'score': 'snv_score'})
     df = df.loc[df['Consequence'].str.contains('missense_variant')] #Filters only for missense variants
 
-    if gene == 'RAD51D' and filter_rna_low: #Filters out RAD51D variants with low RNA consequence
-        df = df.loc[df['RNA_consequence'] != 'low']
+    if rna_filter_val is not None: #Optionally filter out variants with specified RNA consequence
+        df = df.loc[df['RNA_consequence'] != rna_filter_val]
 
     df['AApos'] = df['AAsub'].transform(lambda x: int(x[1:-1])) #Creates new amino acid position column
-
-    df = df.loc[df['AApos'].isin(region_resi)] #Filters for variants in residues in region of interest
 
     return df
 
@@ -147,18 +143,51 @@ def rgb_to_hex(r, g, b): #Converts float RGB (0-1) to hex string for ChimeraX
     return '#{:02x}{:02x}{:02x}'.format(int(r * 255), int(g * 255), int(b * 255))
 
 
-def main():  # 'session' is injected as a global by ChimeraX at runtime via runscript
-    legend = create_colorbar_legend()
+def get_gene_configs(session, available_chains):
+    parent = session.ui.main_window
+    gene_configs = []
+    while True:
+        file_path, _ = QFileDialog.getOpenFileName(
+            parent, 'Select SGE Score File', '', 'Excel Files (*.xlsx)')
+        if not file_path:
+            break
+        chain_id, ok = QInputDialog.getItem(
+            parent, 'Select Chain',
+            f'Chain for {os.path.basename(file_path)}:',
+            available_chains, 0, False)
+        if not ok:
+            break
+        rna_filter, ok = QInputDialog.getText(
+            parent, 'RNA Filter (optional)',
+            'Exclude variants where RNA_consequence equals (leave blank to skip):')
+        rna_filter_val = rna_filter.strip() if ok and rna_filter.strip() else None
+        gene_configs.append((file_path, chain_id, rna_filter_val))
+        again, ok = QInputDialog.getText(
+            parent, 'Add Another?', 'Color another gene/chain? (y/n):')
+        if not ok or again.strip().lower() != 'y':
+            break
+    if not gene_configs:
+        raise ValueError('No data files specified — script aborted.')
+    return gene_configs
 
+
+def main():  # 'session' is injected as a global by ChimeraX at runtime via runscript
+    parent = session.ui.main_window
+
+    legend = create_colorbar_legend()
     if save_legend:
-        legend.savefig('/Users/ivan/Desktop/RAD51D_XRCC2_figs/chimerax_ribbon_legend.png', dpi = 500)
+        save_path, _ = QFileDialog.getSaveFileName(parent, 'Save Legend', '', 'PNG Files (*.png)')
+        if save_path:
+            legend.savefig(save_path, dpi=500)
 
     existing_models = session.models.list()
-    if existing_models:
-        print(f'Existing session detected ({len(existing_models)} model(s) open). Skipping structure load — applying colors only.')
-    else:
-        print(f'Loading structure {pdb}...')
-        run(session, f'open {pdb} from pdb') #Fetches PDB structure from RCSB
+    if not existing_models:
+        pdb_id, ok = QInputDialog.getText(parent, 'Load Structure', 'Enter PDB ID:')
+        if not ok or not pdb_id.strip():
+            raise ValueError('No PDB ID provided — script aborted.')
+        pdb_id = pdb_id.strip().upper()
+        print(f'Loading structure {pdb_id}...')
+        run(session, f'open {pdb_id} from pdb') #Fetches PDB structure from RCSB
 
         run(session, 'show cartoons')  #Show cartoon for all chains in the model
         run(session, 'hide atoms')     #Hide atoms for all chains
@@ -170,14 +199,18 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
             run(session, 'show nucleic bonds')
         else:
             run(session, f'nucleotides {dna_style}')  #Show ssDNA bases (stubs/slab/fill)
+    else:
+        print(f'Existing session detected ({len(existing_models)} model(s) open). Skipping structure load — applying colors only.')
 
-    for gene in sge_data.keys():
-        chain = chains[gene] #Gets chain for specified gene
+    models = session.models.list()
+    available_chains = sorted(set(c.chain_id for m in models for c in m.chains))
 
-        print(f'Reading SGE scores for {gene}...')
-        region_resi = region_residues(gene) #Gets region residues
-        sge_scores = sge_data[gene] #Gets SGE score file path
-        raw_scores = read_scores(sge_scores, region_resi, gene) #Gets raw SGE scores
+    gene_configs = get_gene_configs(session, available_chains)
+
+    for file_path, chain_id, rna_filter_val in gene_configs:
+        label = os.path.basename(file_path)
+        print(f'Reading SGE scores from {label}...')
+        raw_scores = read_scores(file_path, rna_filter_val)
 
         print('Grouping scores by residue...')
         min_scores, mean_scores, median_scores = group_scores(raw_scores) #Gets min/mean/median score dataframes
@@ -195,13 +228,13 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
         normalized_values = normalize_values(residue_values) #Scores normalized to between 0 and 1
 
         print('Applying colors in ChimeraX...')
-        print(f'Coloring chain {chain} based on {analysis_type} SGE scores...')
+        print(f'Coloring chain {chain_id} based on {analysis_type} SGE scores...')
 
         if not existing_models:
-            run(session, f'show /{chain} cartoons')  #Shows cartoon for chain
-            run(session, f'hide /{chain} & protein atoms')     #Hides atom representation for protein only
-            run(session, f'hide /{chain} & protein bonds')     #Hides bond/stick representation for protein only
-        run(session, f'color /{chain} & protein gray target abc') #Colors protein residues grey first (cartoons and atoms), excludes pseudobonds (e.g. H-bonds)
+            run(session, f'show /{chain_id} cartoons')  #Shows cartoon for chain
+            run(session, f'hide /{chain_id} & protein atoms')     #Hides atom representation for protein only
+            run(session, f'hide /{chain_id} & protein bonds')     #Hides bond/stick representation for protein only
+        run(session, f'color /{chain_id} & protein gray target abc') #Colors protein residues grey first (cartoons and atoms), excludes pseudobonds (e.g. H-bonds)
 
         #this block does the coloring
         for residue, value in normalized_values.items():
@@ -210,7 +243,8 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
             else:
                 color = get_color(value) #Gets color from color map
                 hex_color = rgb_to_hex(color[0], color[1], color[2])
-            run(session, f'color /{chain}:{residue} {hex_color}') #Colors cartoons and atoms
+            run(session, f'color /{chain_id}:{residue} {hex_color}') #Colors cartoons and atoms
 
     print('Done!')
+
 main()
