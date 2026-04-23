@@ -284,7 +284,7 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
             run(session, f'show /{chain_id} cartoons')  #Shows cartoon for chain
             run(session, f'hide /{chain_id} & protein atoms')     #Hides atom representation for protein only
             run(session, f'hide /{chain_id} & protein bonds')     #Hides bond/stick representation for protein only
-        run(session, f'color /{chain_id} & protein gray target abc') #Colors protein residues grey first (cartoons and atoms), excludes pseudobonds (e.g. H-bonds)
+        run(session, f'color /{chain_id} & protein gray target abcs') #Colors protein residues grey first (cartoons, atoms, surface), excludes pseudobonds (e.g. H-bonds)
 
         #this block does the coloring
         for residue, value in normalized_values.items():
@@ -293,7 +293,7 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
             else:
                 color = get_color(value) #Gets color from color map
                 hex_color = rgb_to_hex(color[0], color[1], color[2])
-            run(session, f'color /{chain_id}:{residue} {hex_color}') #Colors cartoons and atoms
+            run(session, f'color /{chain_id}:{residue} {hex_color} target abcs') #Colors cartoons, atoms, and surface
 
     print('Done!')
 
