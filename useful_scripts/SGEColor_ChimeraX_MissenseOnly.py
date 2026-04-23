@@ -115,6 +115,13 @@ def normalize_values(values): #Normalizes all values between 0 and 1 for colorin
     return {k: (v - min_val) / (max_val - min_val) for k, v in clamped_values.items()}
 
 
+AA_ONE_TO_THREE = {
+    'A': 'ALA', 'C': 'CYS', 'D': 'ASP', 'E': 'GLU', 'F': 'PHE',
+    'G': 'GLY', 'H': 'HIS', 'I': 'ILE', 'K': 'LYS', 'L': 'LEU',
+    'M': 'MET', 'N': 'ASN', 'P': 'PRO', 'Q': 'GLN', 'R': 'ARG',
+    'S': 'SER', 'T': 'THR', 'V': 'VAL', 'W': 'TRP', 'Y': 'TYR',
+}
+
 colors = [(1.0, 1.0, 1.0), (1, 0, 0)]  # White -> Red
 n_bins = 1000  # Number of bins for the colormap
 cmap_name = 'gray_to_red'
@@ -223,6 +230,7 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
         label = os.path.basename(file_path)
         print(f'Reading SGE scores from {label}...')
         raw_scores = read_scores(file_path, rna_score_threshold)
+        ref_aa_by_pos = raw_scores.drop_duplicates('AApos').set_index('AApos')['AAsub'].apply(lambda x: x[0]).to_dict()
 
         print('Grouping scores by residue...')
         min_scores, mean_scores, median_scores = group_scores(raw_scores) #Gets min/mean/median score dataframes
@@ -238,6 +246,34 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
 
         print('Normalizing values for coloring...')
         normalized_values = normalize_values(residue_values) #Scores normalized to between 0 and 1
+
+        # Build residue map for the target chain from the loaded structure
+        chain_residue_map = {}
+        for m in models:
+            for c in m.chains:
+                if c.chain_id == chain_id:
+                    chain_residue_map = {r.number: r.name for r in c.residues if r is not None}
+                    break
+            if chain_residue_map:
+                break
+
+        # Warn about scored positions absent from the structure
+        missing = sorted(set(normalized_values) - set(chain_residue_map))
+        if missing:
+            print(f'Warning: {len(missing)} scored position(s) not found in chain {chain_id}: {missing}')
+
+        # Warn about positions where the reference amino acid doesn't match the structure
+        mismatches = []
+        for pos in sorted(set(normalized_values) & set(chain_residue_map)):
+            ref_1letter = ref_aa_by_pos.get(pos)
+            expected = AA_ONE_TO_THREE.get(ref_1letter) if ref_1letter else None
+            actual = chain_residue_map[pos]
+            if expected and actual != expected:
+                mismatches.append(f'  pos {pos}: score file says {ref_1letter} ({expected}), structure has {actual}')
+        if mismatches:
+            print(f'Warning: {len(mismatches)} amino acid mismatch(es) in chain {chain_id}:')
+            for msg in mismatches:
+                print(msg)
 
         print('Applying colors in ChimeraX...')
         print(f'Coloring chain {chain_id} based on {analysis_type} SGE scores...')
