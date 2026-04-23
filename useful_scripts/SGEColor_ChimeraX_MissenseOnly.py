@@ -15,12 +15,14 @@ INTERACTIVE DIALOGS (shown at runtime)
 1. PDB ID          — prompted only if no structure is currently loaded.
                      If a model is already open, that structure is used as-is.
 2. SGE score file  — file picker for an Excel (.xlsx) SGE score table.
-                     The file must contain a sheet named 'scores' with columns:
-                       variant_qc_flag, consequence, amino_acid_change, score,
-                       RNA_consequence (optional, used by the RNA filter below)
+                     Supported formats: .xlsx (must contain a sheet named 'scores'),
+                     .tsv (tab-separated), .csv (comma-separated).
+                     Required columns: variant_qc_flag, consequence,
+                       amino_acid_change, score
+                     Optional column: RNA_consequence (used by the RNA filter below)
 3. Chain selection — dropdown populated from the chains in the loaded structure.
-4. RNA filter      — (optional) enter a value (e.g. 'low') to exclude variants
-                     where RNA_consequence equals that value. Leave blank to skip.
+4. RNA filter      — (optional) enter a numeric threshold to exclude variants
+                     where RNA_score is below that value. Cancel to skip.
 5. Add another?    — repeat steps 2–4 to color additional chains in one run.
 
 CONFIGURATION (edit at top of script)
@@ -57,15 +59,23 @@ save_legend = False #Whether to save the legend figure
 dna_style = 'stubs' #ssDNA display style: 'stubs', 'slab', 'fill', or 'atoms'. ('ladder' requires dsDNA and won't work here)
 
 
-def read_scores(file, rna_filter_val=None): #Reads score file
-    df = pd.read_excel(file, sheet_name='scores') #Reads in score file
+def read_scores(file, rna_score_threshold=None): #Reads score file
+    ext = os.path.splitext(file)[1].lower()
+    if ext == '.xlsx':
+        df = pd.read_excel(file, sheet_name='scores')
+    elif ext == '.tsv':
+        df = pd.read_csv(file, sep='\t')
+    elif ext == '.csv':
+        df = pd.read_csv(file)
+    else:
+        raise ValueError(f'Unsupported file type: {ext}. Use .xlsx, .tsv, or .csv')
 
     df = df.loc[df['variant_qc_flag'] != 'WARN'] #Filters out variants with WARN flag
     df = df.rename(columns={'consequence': 'Consequence', 'amino_acid_change': 'AAsub', 'score': 'snv_score'})
     df = df.loc[df['Consequence'].str.contains('missense_variant')] #Filters only for missense variants
 
-    if rna_filter_val is not None: #Optionally filter out variants with specified RNA consequence
-        df = df.loc[df['RNA_consequence'] != rna_filter_val]
+    if rna_score_threshold is not None: #Optionally filter out variants below the RNA score threshold; NaN rows are kept
+        df = df.loc[df['RNA_score'].isna() | (df['RNA_score'] >= rna_score_threshold)]
 
     df['AApos'] = df['AAsub'].transform(lambda x: int(x[1:-1])) #Creates new amino acid position column
 
@@ -148,7 +158,8 @@ def get_gene_configs(session, available_chains):
     gene_configs = []
     while True:
         file_path, _ = QFileDialog.getOpenFileName(
-            parent, 'Select SGE Score File', '', 'Excel Files (*.xlsx)')
+            parent, 'Select SGE Score File', '',
+            'Score Files (*.xlsx *.tsv *.csv);;Excel (*.xlsx);;TSV (*.tsv);;CSV (*.csv)')
         if not file_path:
             break
         chain_id, ok = QInputDialog.getItem(
@@ -157,11 +168,12 @@ def get_gene_configs(session, available_chains):
             available_chains, 0, False)
         if not ok:
             break
-        rna_filter, ok = QInputDialog.getText(
-            parent, 'RNA Filter (optional)',
-            'Exclude variants where RNA_consequence equals (leave blank to skip):')
-        rna_filter_val = rna_filter.strip() if ok and rna_filter.strip() else None
-        gene_configs.append((file_path, chain_id, rna_filter_val))
+        rna_threshold, ok = QInputDialog.getDouble(
+            parent, 'RNA Score Filter (optional)',
+            'Exclude variants where RNA_score is below (cancel to skip):',
+            0.0, -10.0, 10.0, 3)
+        rna_score_threshold = rna_threshold if ok else None
+        gene_configs.append((file_path, chain_id, rna_score_threshold))
         again, ok = QInputDialog.getText(
             parent, 'Add Another?', 'Color another gene/chain? (y/n):')
         if not ok or again.strip().lower() != 'y':
@@ -207,10 +219,10 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
 
     gene_configs = get_gene_configs(session, available_chains)
 
-    for file_path, chain_id, rna_filter_val in gene_configs:
+    for file_path, chain_id, rna_score_threshold in gene_configs:
         label = os.path.basename(file_path)
         print(f'Reading SGE scores from {label}...')
-        raw_scores = read_scores(file_path, rna_filter_val)
+        raw_scores = read_scores(file_path, rna_score_threshold)
 
         print('Grouping scores by residue...')
         min_scores, mean_scores, median_scores = group_scores(raw_scores) #Gets min/mean/median score dataframes
