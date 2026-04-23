@@ -222,7 +222,7 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
         print(f'Existing session detected ({len(existing_models)} model(s) open). Skipping structure load — applying colors only.')
 
     models = session.models.list()
-    available_chains = sorted(set(c.chain_id for m in models for c in m.chains))
+    available_chains = sorted(set(c.chain_id for m in models if hasattr(m, 'chains') for c in m.chains))
 
     gene_configs = get_gene_configs(session, available_chains)
 
@@ -250,6 +250,8 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
         # Build residue map for the target chain from the loaded structure
         chain_residue_map = {}
         for m in models:
+            if not hasattr(m, 'chains'):
+                continue
             for c in m.chains:
                 if c.chain_id == chain_id:
                     chain_residue_map = {r.number: r.name for r in c.residues if r is not None}
