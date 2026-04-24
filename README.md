@@ -10,7 +10,7 @@ A collection of tools for Saturation Genome Editing (SGE) workflows, covering ol
 sge-utils/
 ├── notebook_utils/           # Jupyter notebooks for SGE library design
 ├── SimpleSGEViz/             # CLI pipeline for SGE fitness score visualization
-└── useful_shell_scripts/     # Standalone bash utilities for SGE 
+└── useful_scripts/           # Standalone utilities for SGE data processing and visualization
 ```
 
 ---
@@ -122,9 +122,53 @@ Optional files (ClinVar, gnomAD, domain annotations, VEP output, edit rates, tar
 
 ---
 
-## useful_shell_scripts
+## useful_scripts
 
-Standalone bash scripts for common SGE data processing tasks.
+Standalone scripts for common SGE data processing and structure visualization tasks.
+
+### SGEColor_ChimeraX_MissenseOnly.py
+
+Colors a protein ribbon structure in [ChimeraX](https://www.cgl.ucsf.edu/chimerax/) by per-residue SGE scores using only missense variants. Scores are aggregated per amino acid position and mapped onto a white → red color scale clamped to [−0.2, 0].
+
+> **Requirement:** [UCSF ChimeraX](https://www.cgl.ucsf.edu/chimerax/) must be installed separately — it is not part of the conda environment. Required Python packages (`pandas`, `openpyxl`, `matplotlib`) are installed automatically into ChimeraX's Python environment on first run.
+
+**Usage:**
+
+In the ChimeraX command line:
+```
+runscript /path/to/SGEColor_ChimeraX_MissenseOnly.py
+```
+
+The script guides the user through a series of dialogs at runtime:
+
+| Step | Dialog | Notes |
+|---|---|---|
+| 1 | PDB ID | Skipped if a structure is already loaded |
+| 2 | SGE score file | File picker; accepts `.xlsx`, `.tsv`, or `.csv` |
+| 3 | Chain selection | Dropdown populated from chains in the loaded structure |
+| 4 | RNA score filter | Optional — exclude variants below a given `RNA_score` threshold |
+| 5 | Add another? | Repeat steps 2–4 to color multiple chains in one run |
+
+**Score file format:**
+
+Required columns: `variant_qc_flag`, `consequence`, `amino_acid_change`, `score`
+
+Optional column: `RNA_score` (used by the RNA score filter)
+
+For `.xlsx` files, scores must be on a sheet named `scores`.
+
+**Configuration** (edit at top of script):
+
+| Parameter | Options | Default | Description |
+|---|---|---|---|
+| `analysis_type` | `'med'` \| `'mean'` \| `'min'` | `'med'` | Score aggregation method per residue |
+| `show_legend` | `True` \| `False` | `False` | Show colorbar legend window |
+| `save_legend` | `True` \| `False` | `False` | Prompt to save legend as PNG |
+| `dna_style` | `'stubs'` \| `'slab'` \| `'fill'` \| `'atoms'` | `'stubs'` | ssDNA display style |
+
+**Surface coloring:** The script targets atoms, cartoon, and surface (`target abcs`). For surface coloring to apply, show the surface before running the script (`surface` in the ChimeraX command line, or **Molecule Display → Surfaces → Show**).
+
+---
 
 ### GetEditRates.sh
 
