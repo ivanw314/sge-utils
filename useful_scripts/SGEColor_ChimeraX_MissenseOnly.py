@@ -19,11 +19,18 @@ INTERACTIVE DIALOGS (shown at runtime)
                      .tsv (tab-separated), .csv (comma-separated).
                      Required columns: variant_qc_flag, consequence,
                        amino_acid_change, score
-                     Optional column: RNA_consequence (used by the RNA filter below)
+                     RNA_score (optional column) used by RNA filter below
 3. Chain selection — dropdown populated from the chains in the loaded structure.
 4. RNA filter      — (optional) enter a numeric threshold to exclude variants
                      where RNA_score is below that value. Cancel to skip.
 5. Add another?    — repeat steps 2–4 to color additional chains in one run.
+
+SURFACE COLORING
+-----------------
+The script colors atoms, cartoon, and surface (target abcs). For surface coloring
+to apply, the surface must already be visible before running the script. To show
+the surface first, run in the ChimeraX command line or select "Show" under "Surfaces" in the "Molecule Display" tab:
+    surface
 
 CONFIGURATION (edit at top of script)
 ---------------------------------------
@@ -295,6 +302,7 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
                 hex_color = rgb_to_hex(color[0], color[1], color[2])
             run(session, f'color /{chain_id}:{residue} {hex_color} target abcs') #Colors cartoons, atoms, and surface
 
+    run(session, 'lighting flat')
     print('Done!')
 
 main()
