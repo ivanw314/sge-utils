@@ -265,7 +265,7 @@ def make_plot(
                     ha="center", va="bottom", fontsize=12, fontweight="bold", family="Arial")
 
     # Gene name
-    ax.text(1.02, 0.75, gene, transform=ax.transAxes, clip_on=False,
+    ax.text(1.02, 0.90, gene, transform=ax.transAxes, clip_on=False,
             ha="left", va="center", fontsize=16, fontweight="bold", family="Arial")
 
     # Variant stats
