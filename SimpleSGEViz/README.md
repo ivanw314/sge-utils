@@ -94,7 +94,7 @@ Multiple genes can be processed in a single run by placing all their files in th
 | `*{gene}*ClinVar*SNV*` | ClinVar germline classification file (tab-delimited `.txt` from ClinVar download). File name matching is case-insensitive. |
 | `*{gene}*gnomAD*` | gnomAD allele frequencies (CSV or Excel) |
 | `*{gene}*Regeneron*` | Regeneron allele frequencies (CSV or Excel) |
-| `*{gene}*domain*` | Protein domain annotations (CSV or Excel). Adds a domain cartoon strip above the AA heatmap. File name matching is case-insensitive. See [Domain annotation file format](#domain-annotation-file-format) below. |
+| `*{gene}*domain*` | Protein domain annotations (CSV or Excel). Adds a domain cartoon strip above the AA heatmap, and overlays colored domain blocks with name labels on the exon and library cartoons. File name matching is case-insensitive. See [Domain annotation file format](#domain-annotation-file-format) below. |
 | `*{gene}*editrates*` | Library edit rates (tab-delimited `.tsv`). File name matching is case-insensitive. See [Edit rates file format](#edit-rates-file-format) below. |
 | `*{gene}*targets*` | Library targets (tab-delimited `.tsv` with `editstart` and `editstop` columns). When present, the edit coordinate ranges are used as library amplicons for the cartoon library track, triggering `{gene}_library_cartoon`. File name matching is case-insensitive. See [Targets file format](#targets-file-format) below. |
 | `*{gene}*cartoon*` | Gene cartoon Excel file (`.xlsx`) with exon/library coordinates and metadata. Overrides the automatic Ensembl fetch. See [Gene cartoon file format](#gene-cartoon-file-format) below. |
@@ -147,8 +147,8 @@ All files are written to `output_dir` with the gene name as a prefix.
 | `{gene}_clinvar_roc` | ROC curve for B/LB vs P/LP classification using SGE score | If ClinVar file detected and both classes present |
 | `{gene}_maf_vs_score` | Binned heatmap of log10(allele frequency) vs fitness score | If gnomAD or Regeneron file detected |
 | `{gene}_edit_rate_barplot` | Bar chart of library edit rates per SGE target, grouped by replicate | If edit rates file detected |
-| `{gene}_exon_cartoon` | Scalable exon structure cartoon with UTR/CDS regions, ATG/stop markers, and compressed introns | If exon coordinates available and no library amplicons present |
-| `{gene}_library_cartoon` | Two-track Altair cartoon: exon structure above a library amplicon coverage track | If exon coordinates available and library amplicons present |
+| `{gene}_exon_cartoon` | Scalable exon structure cartoon with UTR/CDS regions, ATG/stop markers, and compressed introns; colored domain blocks with name labels overlaid when a domain file is present | If exon coordinates available and no library amplicons present |
+| `{gene}_library_cartoon` | Two-track Altair cartoon: exon structure above a library amplicon coverage track; colored domain blocks with name labels overlaid when a domain file is present | If exon coordinates available and library amplicons present |
 | `{gene}_single_track_cartoon` | Single-track matplotlib cartoon: CDS/UTR exon blocks with domain coloring and library amplicon crosshatch, ATG/Stop markers, and exon labels | If exon coordinates available and library amplicons present |
 
 ### Excel workbook (with `--excel`)
