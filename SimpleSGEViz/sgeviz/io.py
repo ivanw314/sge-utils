@@ -60,7 +60,7 @@ def find_genes(input_dir: Path) -> dict:
         gene = stem_part.split("allscores")[0].rstrip(".")
         genes[gene] = {
             "all_scores": allscores_path,
-            "model_params": find_one(f"*{gene}*modelparams*.tsv"),
+            "model_params": find_optional(f"*{gene}*modelparams*.tsv"),
             "snv_counts": find_one(f"*{gene}*snvcounts*.tsv"),
             "del_counts": find_one(f"*{gene}*delcounts*.tsv"),
             # Optional allele frequency files (CSV or Excel)
