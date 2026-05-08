@@ -105,6 +105,16 @@ def parse_args():
         help="Genome assembly for Ensembl coordinate fetching (default: GRCh38).",
     )
     parser.add_argument(
+        "--rna-threshold",
+        type=float,
+        default=None,
+        metavar="THRESHOLD",
+        help="Precalculated RNA score threshold. When supplied, an RNA_consequence "
+             "column is added to the scores dataframe and Excel output: variants "
+             "with RNA_score >= THRESHOLD are labeled 'normal', those below are "
+             "'low'. Requires an RNA_score column in the allscores file.",
+    )
+    parser.add_argument(
         "--exon-color",
         type=str,
         default=None,
@@ -152,6 +162,12 @@ def main():
         print(f"\n[{gene}] Loading data...")
         scores_df, thresholds = process.load_scores(files)
         scores_df = process.load_vep(files, scores_df)
+        if args.rna_threshold is not None:
+            if "RNA_score" in scores_df.columns:
+                scores_df = process.apply_rna_threshold(scores_df, args.rna_threshold)
+                print(f"  RNA_consequence applied (threshold: {args.rna_threshold})")
+            else:
+                print(f"[{gene}] Warning: --rna-threshold specified but RNA_score column not found in allscores file.")
         counts_df = io.load_counts(files)
         print(f"  {len(scores_df)} variants loaded")
 

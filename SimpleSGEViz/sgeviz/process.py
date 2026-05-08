@@ -208,6 +208,23 @@ def _read_regeneron(path: Path) -> pd.DataFrame:
     return df[["pos_id", "regeneron_maf"]]
 
 
+def apply_rna_threshold(df: pd.DataFrame, rna_threshold: float) -> pd.DataFrame:
+    """Add RNA_consequence column based on a precalculated RNA score threshold.
+
+    Variants with RNA_score >= threshold are labeled 'normal'; below are 'low'.
+    Rows where RNA_score is NaN receive NaN in RNA_consequence.
+    Returns df unchanged if the RNA_score column is absent.
+    """
+    if "RNA_score" not in df.columns:
+        return df
+    df = df.copy()
+    df["RNA_consequence"] = pd.NA
+    valid = df["RNA_score"].notna()
+    df.loc[valid & (df["RNA_score"] >= rna_threshold), "RNA_consequence"] = "normal"
+    df.loc[valid & (df["RNA_score"] < rna_threshold), "RNA_consequence"] = "low"
+    return df
+
+
 def load_vep(files: dict, scores_df: pd.DataFrame) -> pd.DataFrame:
     """Load a VEP Excel output file and merge predictor scores into scores_df.
 
