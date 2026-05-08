@@ -30,7 +30,7 @@ def load_scores(files: dict):
             import warnings
             warnings.warn(
                 f"modelparams thresh_abnormal ({thresholds[0]:.4f}) is greater than "
-                f"thresh_normal ({thresholds[1]:.4f}) — thresholds appear inverted.",
+                f"thresh_normal ({thresholds[1]:.4f}) — thresholds appear inverted or are incorrect.",
                 UserWarning,
                 stacklevel=2,
             )
