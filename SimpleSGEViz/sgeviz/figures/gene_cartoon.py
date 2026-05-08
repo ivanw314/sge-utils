@@ -339,6 +339,22 @@ def _make_exon_track(
                 tooltip=alt.Tooltip("domain:N", title="Domain"),
             )
         ))
+        # 3c. Domain name labels above the colored rectangles
+        dom_label_df = (
+            dom_df.groupby("domain", sort=False)
+            .agg(x_min=("x", "min"), x2_max=("x2", "max"))
+            .reset_index()
+        )
+        dom_label_df["center"] = (dom_label_df["x_min"] + dom_label_df["x2_max"]) / 2
+        layers.append(_base(
+            alt.Chart(dom_label_df)
+            .mark_text(fontSize=fontsize - 5, fontWeight="bold", baseline="bottom", align="center")
+            .encode(
+                x=alt.X("center:Q", scale=x_scale, axis=None),
+                y=alt.value(EXON_TOP - 3),
+                text="domain:N",
+            )
+        ))
 
     # 4. Exon number labels (below) + "Exon" row label in left margin
     # Center each label over the full exon visual span (UTR + CDS sub-segments combined)
