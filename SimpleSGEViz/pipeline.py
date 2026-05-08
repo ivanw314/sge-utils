@@ -41,7 +41,7 @@ from pathlib import Path
 import pandas as pd
 
 from sgeviz import io, process
-from sgeviz.figures import aa_heatmap, clinvar_strip, correlation, edit_rate_barplot, gene_cartoon, histogram_strip, maf_score, predictor_scatter, scores_gene
+from sgeviz.figures import aa_heatmap, clinvar_strip, correlation, edit_rate_barplot, gene_cartoon, histogram_strip, maf_score, predictor_scatter, rna_score, scores_gene
 
 
 def parse_args():
@@ -263,6 +263,19 @@ def main():
             )
         else:
             print(f"[{gene}] No predictor score columns found, skipping predictor scatter.")
+
+        if "RNA_score" in scores_df.columns:
+            io.save_figure(
+                rna_score.make_scatter(scores_df, thresholds, rna_threshold=args.rna_threshold, gene=gene),
+                args.output_dir / f"{gene}_rna_score_scatter.{fmt}",
+            )
+            if args.rna_threshold is not None:
+                io.save_figure(
+                    rna_score.make_stem_plot(scores_df, args.rna_threshold, gene=gene),
+                    args.output_dir / f"{gene}_rna_stem_plot.{fmt}",
+                )
+        else:
+            print(f"[{gene}] No RNA_score column found, skipping RNA figures.")
 
         clinvar_df = process.load_clinvar(files, scores_df)
         if clinvar_df is not None:
