@@ -137,7 +137,7 @@ All files are written to `output_dir` with the gene name as a prefix.
 | File | Description | Condition |
 |---|---|---|
 | `{gene}_histogram_stripplot` | Score distribution histogram (top) and per-consequence strip plot (bottom) | Always |
-| `{gene}_correlation_heatmap` | Pairwise Pearson r heatmap across replicates | Always |
+| `{gene}_correlation_heatmap` | Three side-by-side Pearson r heatmaps across replicates: SNV Only, 3bp Deletion Only, and SNV + Deletion combined | Always |
 | `{gene}_scores_across_gene` | Per-exon scatter plot of fitness scores vs genomic position | Always |
 | `{gene}_aa_heatmap` | Amino acid substitution heatmap (AA position × substitution), optionally with a domain cartoon strip and 3bp deletion scatter panel | If `amino_acid_change` column present |
 | `{gene}_predictor_scatter` | Grid of scatter plots: each predictor score (AlphaMissense, REVEL, CADD, MutPred2) vs. fitness score, colored by consequence, with SGE and published predictor threshold lines | If any predictor column present (from VEP file or `*allscores.tsv`) |
