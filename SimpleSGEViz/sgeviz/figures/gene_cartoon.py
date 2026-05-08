@@ -36,10 +36,17 @@ numbering).
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import altair as alt
 import pandas as pd
 
 _LEFT_MARGIN = 80   # px reserved on the left for row labels ("Exon", "Library")
+
+_DOMAIN_COLORS = [
+    "#B9DBF4", "#C8DBC8", "#F6BF93", "#D5D0F2",
+    "#018571", "#D35400", "#2980B9", "#C0392B",
+]
 
 
 # ── Coordinate transform helpers ──────────────────────────────────────────────
@@ -164,6 +171,79 @@ def _gv(pos: float, segments: list[dict]) -> float:
     return segments[0]["vstart"] if pos < segments[0]["gstart"] else segments[-1]["vend"]
 
 
+# ── Domain helpers ────────────────────────────────────────────────────────────
+
+def _load_domains(domains_path: Path) -> pd.DataFrame:
+    """Load pipeline domain file; return DataFrame with start, end, domain columns."""
+    df = pd.read_csv(domains_path) if domains_path.suffix == ".csv" else pd.read_excel(domains_path)
+    if "tier" in df.columns:
+        df = df[df["tier"] == 0]
+    df[["start", "end"]] = df["aa_residues"].str.split("-", expand=True).astype(int)
+    return df.rename(columns={"region_name": "domain"})[["start", "end", "domain"]]
+
+
+def _build_aa_to_genomic_map(exon_df: pd.DataFrame, atg_pos: int, stop_pos: int, strand: str):
+    """Return aa_to_gen(aa_pos) -> genomic coordinate using original (pre-strand-flip) coords."""
+    exons = exon_df.sort_values("start").reset_index(drop=True)
+    if strand == "plus":
+        cds_segs = [
+            (max(int(r["start"]), atg_pos), min(int(r["end"]), stop_pos))
+            for _, r in exons.iterrows()
+            if min(int(r["end"]), stop_pos) > max(int(r["start"]), atg_pos)
+        ]
+        def aa_to_gen(aa_pos):
+            target, acc = (aa_pos - 1) * 3, 0
+            for gs, ge in cds_segs:
+                if acc + (ge - gs) > target:
+                    return gs + (target - acc)
+                acc += ge - gs
+            return cds_segs[-1][1]
+    else:
+        cds_segs = [
+            (max(int(r["start"]), stop_pos), min(int(r["end"]), atg_pos))
+            for _, r in exons.sort_values("start", ascending=False).iterrows()
+            if min(int(r["end"]), atg_pos) > max(int(r["start"]), stop_pos)
+        ]
+        def aa_to_gen(aa_pos):
+            target, acc = (aa_pos - 1) * 3, 0
+            for cds_lo, cds_hi in cds_segs:
+                if acc + (cds_hi - cds_lo) > target:
+                    return cds_hi - (target - acc)
+                acc += cds_hi - cds_lo
+            return cds_segs[-1][0]
+    return aa_to_gen
+
+
+def _compute_domain_rects(
+    domain_df: pd.DataFrame,
+    exon_df: pd.DataFrame,
+    atg_pos: int,
+    stop_pos: int,
+    strand: str,
+    segments: list[dict],
+) -> list[dict]:
+    """Map domain AA boundaries to visual-space rectangles clipped to CDS segments."""
+    aa_to_gen = _build_aa_to_genomic_map(exon_df, atg_pos, stop_pos, strand)
+    rects = []
+    for i, (_, dom) in enumerate(domain_df.iterrows()):
+        color = _DOMAIN_COLORS[i % len(_DOMAIN_COLORS)]
+        gen_start = aa_to_gen(int(dom["start"]))
+        gen_end   = aa_to_gen(int(dom["end"]))
+        vgc_start = -gen_start if strand == "minus" else gen_start
+        vgc_end   = -gen_end   if strand == "minus" else gen_end
+        v0 = _gv(vgc_start, segments)
+        v1 = _gv(vgc_end,   segments)
+        vlo, vhi = min(v0, v1), max(v0, v1)
+        for seg in segments:
+            if seg["kind"] != "exon":
+                continue
+            ov0 = max(seg["vstart"], vlo)
+            ov1 = min(seg["vend"],   vhi)
+            if ov1 > ov0:
+                rects.append({"x": ov0, "x2": ov1, "fill": color, "domain": dom["domain"]})
+    return rects
+
+
 # ── Internal track builders ───────────────────────────────────────────────────
 
 def _make_exon_track(
@@ -176,6 +256,7 @@ def _make_exon_track(
     x_scale: alt.Scale,
     exon_color: str,
     fontsize: int,
+    domain_rects: list[dict] | None = None,
 ) -> alt.Chart:
     """Build the exon-structure layer (unconfigured, for composing)."""
     TRACK_H = 97
@@ -240,6 +321,22 @@ def _make_exon_track(
                 y=alt.value(UTR_TOP),
                 y2=alt.value(UTR_BOT),
                 tooltip=alt.Tooltip("exon:N", title="Region"),
+            )
+        ))
+
+    # 3b. Domain coloring overlay on CDS blocks
+    if domain_rects:
+        dom_df = pd.DataFrame(domain_rects)
+        layers.append(_base(
+            alt.Chart(dom_df)
+            .mark_rect(stroke="black", strokeWidth=0.8)
+            .encode(
+                x=alt.X("x:Q", scale=x_scale, axis=None),
+                x2="x2:Q",
+                y=alt.value(EXON_TOP),
+                y2=alt.value(EXON_BOT),
+                color=alt.Color("fill:N", scale=None, legend=None),
+                tooltip=alt.Tooltip("domain:N", title="Domain"),
             )
         ))
 
@@ -566,6 +663,7 @@ def make_exon_cartoon(
     utr_max_vw: float = 50.0,
     fontsize: int = 16,
     exon_color: str | None = None,
+    domains_path: Path | None = None,
 ) -> alt.Chart:
     """Draw a scalable exon-structure cartoon with compressed introns and UTRs.
 
@@ -616,6 +714,14 @@ def make_exon_cartoon(
     exon_segs = [s for s in segments if s["kind"] == "exon"]
     utr_segs = [s for s in segments if s["kind"] == "utr"]
 
+    domain_rects = None
+    if domains_path is not None:
+        domain_df = _load_domains(domains_path)
+        if not domain_df.empty:
+            domain_rects = _compute_domain_rects(
+                domain_df, exon_df, meta["atg_pos"], meta["stop_pos"], meta["strand"], segments
+            )
+
     chart_width = width + _LEFT_MARGIN
     x_scale = alt.Scale(domain=[-_LEFT_MARGIN, total_vw], range=[0, chart_width])
 
@@ -623,6 +729,7 @@ def make_exon_cartoon(
         exon_segs, utr_segs, segments, total_vw,
         atg_vgc, stop_vgc,
         x_scale, meta["exon_color"], fontsize,
+        domain_rects=domain_rects,
     )
     return track.configure_axis(grid=False).configure_view(stroke=None)
 
@@ -643,6 +750,7 @@ def make_library_cartoon(
     fontsize: int = 16,
     exon_color: str | None = None,
     lib_color: str | None = None,
+    domains_path: Path | None = None,
 ) -> alt.Chart:
     """Draw an exon-structure cartoon with a library-amplicon track below.
 
@@ -695,6 +803,14 @@ def make_library_cartoon(
     exon_segs = [s for s in segments if s["kind"] == "exon"]
     utr_segs = [s for s in segments if s["kind"] == "utr"]
 
+    domain_rects = None
+    if domains_path is not None:
+        domain_df = _load_domains(domains_path)
+        if not domain_df.empty:
+            domain_rects = _compute_domain_rects(
+                domain_df, exon_df, meta["atg_pos"], meta["stop_pos"], meta["strand"], segments
+            )
+
     chart_width = width + _LEFT_MARGIN
     x_scale = alt.Scale(domain=[-_LEFT_MARGIN, total_vw], range=[0, chart_width])
 
@@ -707,6 +823,7 @@ def make_library_cartoon(
         exon_segs, utr_segs, segments, total_vw,
         atg_vgc, stop_vgc,
         x_scale, meta["exon_color"], fontsize,
+        domain_rects=domain_rects,
     )
     lib_track = _make_library_track(
         lib_df_vgc, segments, x_scale, meta["lib_color"], fontsize,

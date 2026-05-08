@@ -313,6 +313,7 @@ def main():
                     exon_df, lib_df, meta_df,
                     exon_color=args.exon_color,
                     lib_color=args.lib_color,
+                    domains_path=files.get("domains"),
                 )
                 cartoon_name = f"{gene}_library_cartoon"
                 io.save_figure(
