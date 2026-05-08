@@ -330,6 +330,7 @@ def main():
             thresh_df = pd.DataFrame({
                 "non_functional_threshold": [thresholds[0]],
                 "functional_threshold": [thresholds[1]],
+                "rna_threshold": [args.rna_threshold],
             })
 
             # Build merged scores sheet: left-join optional annotations by pos_id
