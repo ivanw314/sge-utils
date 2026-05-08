@@ -119,7 +119,9 @@ def make_scatter(
             height=300,
             title=alt.TitleParams(
                 text=f"Fitness Score vs. RNA Score{' (' + gene + ')' if gene else ''}",
+                subtitle=f"n = {len(df)}",
                 fontSize=22,
+                subtitleFontSize=14,
             ),
         )
     )
