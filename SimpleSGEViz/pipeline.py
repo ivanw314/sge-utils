@@ -41,7 +41,7 @@ from pathlib import Path
 import pandas as pd
 
 from sgeviz import io, process
-from sgeviz.figures import aa_heatmap, clinvar_strip, correlation, edit_rate_barplot, gene_cartoon, histogram_strip, maf_score, predictor_scatter, rna_score, scores_gene
+from sgeviz.figures import aa_heatmap, clinvar_strip, correlation, edit_rate_barplot, gene_cartoon, histogram_strip, maf_score, predictor_scatter, rna_score, scores_gene, single_track_cartoon
 
 
 def parse_args():
@@ -315,16 +315,28 @@ def main():
                     lib_color=args.lib_color,
                 )
                 cartoon_name = f"{gene}_library_cartoon"
+                io.save_figure(
+                    cartoon_chart,
+                    args.output_dir / f"{cartoon_name}.{fmt}",
+                )
+                io.save_matplotlib_figure(
+                    single_track_cartoon.make_plot(
+                        gene, exon_df, meta_df, lib_df,
+                        domains_path=files.get("domains"),
+                        exon_color=args.exon_color or "#d0d0d0",
+                    ),
+                    args.output_dir / f"{gene}_single_track_cartoon.{fmt}",
+                )
             else:
                 cartoon_chart = gene_cartoon.make_exon_cartoon(
                     exon_df, meta_df,
                     exon_color=args.exon_color,
                 )
                 cartoon_name = f"{gene}_exon_cartoon"
-            io.save_figure(
-                cartoon_chart,
-                args.output_dir / f"{cartoon_name}.{fmt}",
-            )
+                io.save_figure(
+                    cartoon_chart,
+                    args.output_dir / f"{cartoon_name}.{fmt}",
+                )
         else:
             print(f"[{gene}] No exon coordinates available, skipping gene cartoon.")
 

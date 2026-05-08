@@ -381,6 +381,22 @@ def load_edit_rates(files: dict):
     return df
 
 
+def save_matplotlib_figure(fig, path: Path):
+    """Save a matplotlib figure. Format is inferred from the extension.
+
+    PNG and SVG are supported. If the path has an .html extension (e.g. when
+    running with --format html) it is saved as PNG instead.
+    """
+    import matplotlib.pyplot as plt
+
+    if path.suffix == ".html":
+        print(f"  Warning: HTML output is not supported for {path.stem}; saving as PNG instead.")
+        path = path.with_suffix(".png")
+    fig.savefig(str(path), bbox_inches="tight")
+    plt.close(fig)
+    print(f"  Saved: {path.name}")
+
+
 def save_figure(chart: alt.Chart, path: Path):
     """Save an Altair chart. Format is inferred from the file extension.
 

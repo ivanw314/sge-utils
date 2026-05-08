@@ -147,8 +147,9 @@ All files are written to `output_dir` with the gene name as a prefix.
 | `{gene}_clinvar_roc` | ROC curve for B/LB vs P/LP classification using SGE score | If ClinVar file detected and both classes present |
 | `{gene}_maf_vs_score` | Binned heatmap of log10(allele frequency) vs fitness score | If gnomAD or Regeneron file detected |
 | `{gene}_edit_rate_barplot` | Bar chart of library edit rates per SGE target, grouped by replicate | If edit rates file detected |
-| `{gene}_exon_cartoon` | Scalable exon structure cartoon with UTR/CDS regions, ATG/stop markers, and compressed introns | If Ensembl fetch succeeds and no `*targets*` TSV present |
-| `{gene}_library_cartoon` | Exon structure cartoon stacked above a library amplicon coverage track | If Ensembl fetch succeeds and a `*targets*` TSV is detected |
+| `{gene}_exon_cartoon` | Scalable exon structure cartoon with UTR/CDS regions, ATG/stop markers, and compressed introns | If exon coordinates available and no library amplicons present |
+| `{gene}_library_cartoon` | Two-track Altair cartoon: exon structure above a library amplicon coverage track | If exon coordinates available and library amplicons present |
+| `{gene}_single_track_cartoon` | Single-track matplotlib cartoon: CDS/UTR exon blocks with domain coloring and library amplicon crosshatch, ATG/Stop markers, and exon labels | If exon coordinates available and library amplicons present |
 
 ### Excel workbook (with `--excel`)
 
