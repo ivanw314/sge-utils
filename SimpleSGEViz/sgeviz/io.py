@@ -362,16 +362,23 @@ def load_targets(files: dict) -> "pd.DataFrame | None":
     )
 
 
+_EDIT_RATE_COLS = ["target_rep", "edit_rate"]
+
+
 def load_edit_rates(files: dict):
     """Load an edit rates TSV file if present.
 
-    Expected columns: target_rep, edit_rate.
+    Expected columns: target_rep, edit_rate. If the file has no header row (or
+    wrong column names), the two columns are assigned those names in order.
     Returns the raw DataFrame or None if no edit rates file was detected.
     """
     path = files.get("edit_rates")
     if path is None:
         return None
-    return pd.read_csv(path, sep="\t")
+    df = pd.read_csv(path, sep="\t")
+    if not all(c in df.columns for c in _EDIT_RATE_COLS):
+        df = pd.read_csv(path, sep="\t", header=None, names=_EDIT_RATE_COLS)
+    return df
 
 
 def save_figure(chart: alt.Chart, path: Path):
