@@ -20,9 +20,9 @@ def find_genes(input_dir: Path) -> dict:
     Returns a dict mapping gene name -> files dict, e.g.:
         {"RAD51D": {"all_scores": Path(...), "snv_counts": Path(...), ...}}
     """
-    allscores_files = sorted(input_dir.glob("*allscores.tsv"))
+    allscores_files = sorted(input_dir.glob("*allscores*.tsv"))
     if not allscores_files:
-        raise FileNotFoundError(f"No '*allscores.tsv' files found in {input_dir}")
+        raise FileNotFoundError(f"No '*allscores*.tsv' files found in {input_dir}")
 
     def find_one(*patterns):
         for pattern in patterns:
@@ -53,14 +53,16 @@ def find_genes(input_dir: Path) -> dict:
 
     genes = {}
     for allscores_path in allscores_files:
-        # Handles both GENE.allscores.tsv and GENEallscores.tsv (with optional prefix)
+        # Handles GENE.allscores.tsv, GENEallscores.tsv, GENE.allscores.v1.2.1.tsv
+        # (with optional date/prefix before the last underscore-separated segment).
+        # Split on "allscores" and take whatever precedes it, stripping a trailing dot.
         stem_part = allscores_path.stem.split("_")[-1]
-        gene = stem_part.removesuffix(".allscores").removesuffix("allscores")
+        gene = stem_part.split("allscores")[0].rstrip(".")
         genes[gene] = {
             "all_scores": allscores_path,
-            "model_params": find_one(f"*{gene}modelparams.tsv", f"*{gene}.modelparams.tsv"),
-            "snv_counts": find_one(f"*{gene}snvcounts.tsv", f"*{gene}.snvcounts.tsv"),
-            "del_counts": find_one(f"*{gene}delcounts.tsv", f"*{gene}.delcounts.tsv"),
+            "model_params": find_one(f"*{gene}*modelparams*.tsv"),
+            "snv_counts": find_one(f"*{gene}*snvcounts*.tsv"),
+            "del_counts": find_one(f"*{gene}*delcounts*.tsv"),
             # Optional allele frequency files (CSV or Excel)
             "gnomad": find_optional(f"*{gene}*gnomAD*"),
             "regeneron": find_optional(f"*{gene}*Regeneron*"),
