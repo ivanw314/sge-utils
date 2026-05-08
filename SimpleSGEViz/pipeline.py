@@ -225,9 +225,8 @@ def main():
             args.output_dir / f"{gene}_histogram_stripplot.{fmt}",
         )
 
-        r_df = correlation.compute_correlations(counts_df)
         io.save_figure(
-            correlation.make_heatmap(r_df, gene=gene),
+            correlation.make_combined_heatmap(counts_df, gene=gene),
             args.output_dir / f"{gene}_correlation_heatmap.{fmt}",
         )
 
