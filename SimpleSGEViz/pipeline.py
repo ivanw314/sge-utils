@@ -322,6 +322,7 @@ def main():
                 io.save_matplotlib_figure(
                     single_track_cartoon.make_plot(
                         gene, exon_df, meta_df, lib_df,
+                        scores_df=scores_df,
                         domains_path=files.get("domains"),
                         exon_color=args.exon_color or "#d0d0d0",
                     ),

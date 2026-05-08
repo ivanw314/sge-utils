@@ -154,6 +154,7 @@ def make_plot(
     exon_df: pd.DataFrame,
     meta_df: pd.DataFrame,
     lib_df: pd.DataFrame,
+    scores_df: pd.DataFrame | None = None,
     domains_path: Path | None = None,
     exon_color: str = "#d0d0d0",
     hatch: str = "//////",
@@ -165,6 +166,9 @@ def make_plot(
     elsewhere). UTR sub-regions are drawn as thinner blocks. Introns are shown
     as backbone gaps. Library amplicon coverage is crosshatched over CDS/UTR
     regions. ATG and Stop markers are drawn above.
+
+    When scores_df is provided, variant counts (SNVs, deletions, RNA
+    measurements) are printed to the right of the gene name.
     """
     segments, gv = _build_vcoords(exon_df, meta_df)
     total_vw = segments[-1]["vend"]
@@ -263,6 +267,22 @@ def make_plot(
     # Gene name
     ax.text(1.02, 0.75, gene, transform=ax.transAxes, clip_on=False,
             ha="left", va="center", fontsize=16, fontweight="bold", family="Arial")
+
+    # Variant stats
+    if scores_df is not None and not scores_df.empty:
+        n_nts = scores_df["start"].nunique()
+        n_snv = (scores_df["var_type"] == "snv").sum()
+        n_del = (scores_df["var_type"] == "3bp_del").sum()
+        lines = [
+            f"{n_nts:,} nts targeted",
+            f"{n_snv:,} SNVs",
+            f"{n_del:,} 3-bp deletions",
+        ]
+        if "RNA_score" in scores_df.columns:
+            n_rna = scores_df["RNA_score"].notna().sum()
+            lines.append(f"{n_rna:,} RNA measurements")
+        ax.text(1.02, 0.58, "\n".join(lines), transform=ax.transAxes, clip_on=False,
+                ha="left", va="top", fontsize=14, family="Arial", linespacing=1.6)
 
     ax.set_xlim(-0.01, total_vw + 0.01)
     ax.set_ylim(y_bot, MKR + 0.25)
