@@ -46,7 +46,7 @@ def compute_correlations(counts_df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(records)
 
 
-def make_heatmap(df: pd.DataFrame, gene: str = "") -> alt.Chart:
+def make_heatmap(df: pd.DataFrame, gene: str = "", subtitle: str = "") -> alt.Chart:
     """Generate Pearson r heatmap across SGE targets and replicate comparisons."""
     targets = natsorted(df["Targets"].unique().tolist())
 
@@ -54,7 +54,12 @@ def make_heatmap(df: pd.DataFrame, gene: str = "") -> alt.Chart:
 
     base = alt.Chart(
         df,
-        title=alt.TitleParams(text=title, fontSize=32),
+        title=alt.TitleParams(
+            text=title,
+            subtitle=subtitle,
+            fontSize=32,
+            subtitleFontSize=20,
+        ),
     ).encode(
         x=alt.X(
             "Tests:N",
@@ -101,3 +106,21 @@ def make_heatmap(df: pd.DataFrame, gene: str = "") -> alt.Chart:
     ).transform_filter("isValid(datum.r_correlation)")
 
     return rect + text
+
+
+def make_combined_heatmap(counts_df: pd.DataFrame, gene: str = "") -> alt.Chart:
+    """Generate three horizontally stacked correlation heatmaps: SNV-only, deletion-only, and combined."""
+    subsets = [
+        (counts_df.loc[counts_df["var_type"] == "snv"], "SNV Only"),
+        (counts_df.loc[counts_df["var_type"] == "3bp_del"], "3bp Deletion Only"),
+        (counts_df, "SNV + Deletion"),
+    ]
+
+    charts = []
+    for subset_df, label in subsets:
+        r_df = compute_correlations(subset_df)
+        if r_df.empty:
+            continue
+        charts.append(make_heatmap(r_df, gene=gene, subtitle=label))
+
+    return alt.hconcat(*charts)

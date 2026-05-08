@@ -41,7 +41,7 @@ from pathlib import Path
 import pandas as pd
 
 from sgeviz import io, process
-from sgeviz.figures import aa_heatmap, clinvar_strip, correlation, edit_rate_barplot, gene_cartoon, histogram_strip, maf_score, predictor_scatter, scores_gene
+from sgeviz.figures import aa_heatmap, clinvar_strip, correlation, edit_rate_barplot, gene_cartoon, histogram_strip, maf_score, predictor_scatter, rna_score, scores_gene, single_track_cartoon
 
 
 def parse_args():
@@ -105,6 +105,16 @@ def parse_args():
         help="Genome assembly for Ensembl coordinate fetching (default: GRCh38).",
     )
     parser.add_argument(
+        "--rna-threshold",
+        type=float,
+        default=None,
+        metavar="THRESHOLD",
+        help="Precalculated RNA score threshold. When supplied, an RNA_consequence "
+             "column is added to the scores dataframe and Excel output: variants "
+             "with RNA_score >= THRESHOLD are labeled 'normal', those below are "
+             "'low'. Requires an RNA_score column in the allscores file.",
+    )
+    parser.add_argument(
         "--exon-color",
         type=str,
         default=None,
@@ -152,6 +162,12 @@ def main():
         print(f"\n[{gene}] Loading data...")
         scores_df, thresholds = process.load_scores(files)
         scores_df = process.load_vep(files, scores_df)
+        if args.rna_threshold is not None:
+            if "RNA_score" in scores_df.columns:
+                scores_df = process.apply_rna_threshold(scores_df, args.rna_threshold)
+                print(f"  RNA_consequence applied (threshold: {args.rna_threshold})")
+            else:
+                print(f"[{gene}] Warning: --rna-threshold specified but RNA_score column not found in allscores file.")
         counts_df = io.load_counts(files)
         print(f"  {len(scores_df)} variants loaded")
 
@@ -209,9 +225,8 @@ def main():
             args.output_dir / f"{gene}_histogram_stripplot.{fmt}",
         )
 
-        r_df = correlation.compute_correlations(counts_df)
         io.save_figure(
-            correlation.make_heatmap(r_df, gene=gene),
+            correlation.make_combined_heatmap(counts_df, gene=gene),
             args.output_dir / f"{gene}_correlation_heatmap.{fmt}",
         )
 
@@ -247,6 +262,19 @@ def main():
             )
         else:
             print(f"[{gene}] No predictor score columns found, skipping predictor scatter.")
+
+        if "RNA_score" in scores_df.columns:
+            io.save_figure(
+                rna_score.make_scatter(scores_df, thresholds, rna_threshold=args.rna_threshold, gene=gene),
+                args.output_dir / f"{gene}_rna_score_scatter.{fmt}",
+            )
+            if args.rna_threshold is not None:
+                io.save_figure(
+                    rna_score.make_stem_plot(scores_df, args.rna_threshold, gene=gene),
+                    args.output_dir / f"{gene}_rna_stem_plot.{fmt}",
+                )
+        else:
+            print(f"[{gene}] No RNA_score column found, skipping RNA figures.")
 
         clinvar_df = process.load_clinvar(files, scores_df)
         if clinvar_df is not None:
@@ -285,18 +313,33 @@ def main():
                     exon_df, lib_df, meta_df,
                     exon_color=args.exon_color,
                     lib_color=args.lib_color,
+                    domains_path=files.get("domains"),
                 )
                 cartoon_name = f"{gene}_library_cartoon"
+                io.save_figure(
+                    cartoon_chart,
+                    args.output_dir / f"{cartoon_name}.{fmt}",
+                )
+                io.save_matplotlib_figure(
+                    single_track_cartoon.make_plot(
+                        gene, exon_df, meta_df, lib_df,
+                        scores_df=scores_df,
+                        domains_path=files.get("domains"),
+                        exon_color=args.exon_color or "#d0d0d0",
+                    ),
+                    args.output_dir / f"{gene}_single_track_cartoon.{fmt}",
+                )
             else:
                 cartoon_chart = gene_cartoon.make_exon_cartoon(
                     exon_df, meta_df,
                     exon_color=args.exon_color,
+                    domains_path=files.get("domains"),
                 )
                 cartoon_name = f"{gene}_exon_cartoon"
-            io.save_figure(
-                cartoon_chart,
-                args.output_dir / f"{cartoon_name}.{fmt}",
-            )
+                io.save_figure(
+                    cartoon_chart,
+                    args.output_dir / f"{cartoon_name}.{fmt}",
+                )
         else:
             print(f"[{gene}] No exon coordinates available, skipping gene cartoon.")
 
@@ -314,6 +357,7 @@ def main():
             thresh_df = pd.DataFrame({
                 "non_functional_threshold": [thresholds[0]],
                 "functional_threshold": [thresholds[1]],
+                "rna_threshold": [args.rna_threshold],
             })
 
             # Build merged scores sheet: left-join optional annotations by pos_id

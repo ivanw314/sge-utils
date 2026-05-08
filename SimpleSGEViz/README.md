@@ -25,7 +25,7 @@ sgeviz --help
 ## Usage
 
 ```
-sgeviz <input_dir> <output_dir> [--format html|png|svg] [--excel] [--assembly GRCh38|GRCh37] [--protein-length N] [--px-per-aa N] [--gene-name NAME] [--exon-color HEX] [--lib-color HEX]
+sgeviz <input_dir> <output_dir> [--format html|png|svg] [--excel] [--rna-threshold THRESHOLD] [--assembly GRCh38|GRCh37] [--protein-length N] [--px-per-aa N] [--gene-name NAME] [--exon-color HEX] [--lib-color HEX]
 ```
 
 > If you haven't installed via `pip install -e .`, you can also run `python pipeline.py` directly with the same arguments.
@@ -38,6 +38,7 @@ sgeviz <input_dir> <output_dir> [--format html|png|svg] [--excel] [--assembly GR
 | `output_dir` | Directory where output figures will be saved (created if it does not exist) |
 | `--format` | Output format for figures: `html`, `png`, or `svg` (default: `png`) |
 | `--excel` | Also write a multi-sheet Excel workbook for each gene (requires `openpyxl`) |
+| `--rna-threshold THRESHOLD` | Precalculated RNA score threshold. When supplied, an `RNA_consequence` column is added to the scores dataframe and Excel output: variants with `RNA_score ≥ THRESHOLD` are labeled `normal`, those below are `low`. Requires an `RNA_score` column in the allscores file. |
 | `--assembly` | Genome assembly for Ensembl coordinate fetching: `GRCh38` (default) or `GRCh37`. |
 | `--protein-length N` | Override the protein length in amino acids. If omitted, the length is derived automatically from the Ensembl CDS annotation. Use this to truncate the heatmap x-axis to a specific region. |
 | `--px-per-aa N` | Pixels allocated per amino acid column in the AA heatmap (default: `4`). Reduce to produce a narrower figure, e.g. `--px-per-aa 2`. |
@@ -69,10 +70,11 @@ Exon coordinates are fetched automatically from Ensembl (GRCh38), the canonical 
 
 ## Input Files
 
-The pipeline detects genes automatically by scanning for `*allscores.tsv` files and extracting the gene name from each filename. Two naming conventions are supported:
+The pipeline detects genes automatically by scanning for `*allscores*.tsv` files and extracting the gene name from each filename. Three naming conventions are supported:
 
 - **Run-together:** `20260129_RAD51Dallscores.tsv` → `RAD51D`
 - **Dot-separated:** `CTCF.allscores.tsv` → `CTCF`
+- **Versioned:** `BARD1.allscores.v1.2.1.tsv` → `BARD1`
 
 Multiple genes can be processed in a single run by placing all their files in the same input directory.
 
@@ -80,19 +82,19 @@ Multiple genes can be processed in a single run by placing all their files in th
 
 | Pattern | Description |
 |---|---|
-| `*{gene}allscores.tsv` or `*{gene}.allscores.tsv` | Combined SNV and 3bp deletion fitness scores |
-| `*{gene}modelparams.tsv` or `*{gene}.modelparams.tsv` | SGE model thresholds (non-functional and functional) |
-| `*{gene}snvcounts.tsv` or `*{gene}.snvcounts.tsv` | Per-replicate SNV read counts |
-| `*{gene}delcounts.tsv` or `*{gene}.delcounts.tsv` | Per-replicate 3bp deletion read counts |
+| `*{gene}*allscores*.tsv` | Combined SNV and 3bp deletion fitness scores |
+| `*{gene}*snvcounts*.tsv` | Per-replicate SNV read counts |
+| `*{gene}*delcounts*.tsv` | Per-replicate 3bp deletion read counts |
 
 ### Optional (auto-detected; figures generated only when present)
 
 | Pattern | Description |
 |---|---|
+| `*{gene}*modelparams*.tsv` | SGE model thresholds (`thresh_abnormal`, `thresh_normal`). When present, these values are used directly as the non-functional and functional thresholds. If absent, thresholds are estimated from the GMM classifications in the allscores file. If the modelparams thresholds appear inverted or incorrect (abnormal > normal), the pipeline warns and asks whether to fall back to the GMM estimate. |
 | `*{gene}*ClinVar*SNV*` | ClinVar germline classification file (tab-delimited `.txt` from ClinVar download). File name matching is case-insensitive. |
 | `*{gene}*gnomAD*` | gnomAD allele frequencies (CSV or Excel) |
 | `*{gene}*Regeneron*` | Regeneron allele frequencies (CSV or Excel) |
-| `*{gene}*domain*` | Protein domain annotations (CSV or Excel). Adds a domain cartoon strip above the AA heatmap. File name matching is case-insensitive. See [Domain annotation file format](#domain-annotation-file-format) below. |
+| `*{gene}*domain*` | Protein domain annotations (CSV or Excel). Adds a domain cartoon strip above the AA heatmap, and overlays colored domain blocks with name labels on the exon and library cartoons. File name matching is case-insensitive. See [Domain annotation file format](#domain-annotation-file-format) below. |
 | `*{gene}*editrates*` | Library edit rates (tab-delimited `.tsv`). File name matching is case-insensitive. See [Edit rates file format](#edit-rates-file-format) below. |
 | `*{gene}*targets*` | Library targets (tab-delimited `.tsv` with `editstart` and `editstop` columns). When present, the edit coordinate ranges are used as library amplicons for the cartoon library track, triggering `{gene}_library_cartoon`. File name matching is case-insensitive. See [Targets file format](#targets-file-format) below. |
 | `*{gene}*cartoon*` | Gene cartoon Excel file (`.xlsx`) with exon/library coordinates and metadata. Overrides the automatic Ensembl fetch. See [Gene cartoon file format](#gene-cartoon-file-format) below. |
@@ -117,6 +119,7 @@ Multiple genes can be processed in a single run by placing all their files in th
 | Column | Description |
 |---|---|
 | `amino_acid_change` | Amino acid substitution in `A123G` format (enables AA heatmap) |
+| `RNA_score` | Pre-computed RNA splicing/expression score. Passed through to the scores dataframe and Excel output. When `--rna-threshold` is supplied, an `RNA_consequence` column is also added (`normal` if `RNA_score ≥ threshold`, `low` otherwise). |
 | `max_SpliceAI` | Maximum SpliceAI delta score (variants > 0.2 are excluded from missense-specific predictor panels and the AA heatmap) |
 | `am_score` | AlphaMissense pathogenicity score (shown in predictor scatter and AA heatmap VEP sub-panel). Can be supplied directly in this file or loaded automatically from a `*{gene}*vep*` file. |
 | `revel_score` | REVEL score (shown in predictor scatter and AA heatmap VEP sub-panel). Can be supplied directly in this file or loaded automatically from a `*{gene}*vep*` file. |
@@ -134,23 +137,26 @@ All files are written to `output_dir` with the gene name as a prefix.
 | File | Description | Condition |
 |---|---|---|
 | `{gene}_histogram_stripplot` | Score distribution histogram (top) and per-consequence strip plot (bottom) | Always |
-| `{gene}_correlation_heatmap` | Pairwise Pearson r heatmap across replicates | Always |
+| `{gene}_correlation_heatmap` | Three side-by-side Pearson r heatmaps across replicates: SNV Only, 3bp Deletion Only, and SNV + Deletion combined | Always |
 | `{gene}_scores_across_gene` | Per-exon scatter plot of fitness scores vs genomic position | Always |
 | `{gene}_aa_heatmap` | Amino acid substitution heatmap (AA position × substitution), optionally with a domain cartoon strip and 3bp deletion scatter panel | If `amino_acid_change` column present |
 | `{gene}_predictor_scatter` | Grid of scatter plots: each predictor score (AlphaMissense, REVEL, CADD, MutPred2) vs. fitness score, colored by consequence, with SGE and published predictor threshold lines | If any predictor column present (from VEP file or `*allscores.tsv`) |
+| `{gene}_rna_score_scatter` | Scatter plot of RNA score vs. fitness score, colored by consequence, with SGE threshold lines; includes an RNA threshold line when `--rna-threshold` is supplied | If `RNA_score` column present in allscores file |
+| `{gene}_rna_stem_plot` | Per-exon faceted stem plot of RNA scores; stems connect the RNA threshold to variants that are both functionally abnormal and RNA-low | If `RNA_score` column present and `--rna-threshold` supplied |
 | `{gene}_clinvar_strip` | Strip plot of SGE scores by ClinVar germline classification | If ClinVar file detected |
 | `{gene}_clinvar_roc` | ROC curve for B/LB vs P/LP classification using SGE score | If ClinVar file detected and both classes present |
 | `{gene}_maf_vs_score` | Binned heatmap of log10(allele frequency) vs fitness score | If gnomAD or Regeneron file detected |
 | `{gene}_edit_rate_barplot` | Bar chart of library edit rates per SGE target, grouped by replicate | If edit rates file detected |
-| `{gene}_exon_cartoon` | Scalable exon structure cartoon with UTR/CDS regions, ATG/stop markers, and compressed introns | If Ensembl fetch succeeds and no `*targets*` TSV present |
-| `{gene}_library_cartoon` | Exon structure cartoon stacked above a library amplicon coverage track | If Ensembl fetch succeeds and a `*targets*` TSV is detected |
+| `{gene}_exon_cartoon` | Scalable exon structure cartoon with UTR/CDS regions, ATG/stop markers, and compressed introns; colored domain blocks with name labels overlaid when a domain file is present | If exon coordinates available and no library amplicons present |
+| `{gene}_library_cartoon` | Two-track Altair cartoon: exon structure above a library amplicon coverage track; colored domain blocks with name labels overlaid when a domain file is present | If exon coordinates available and library amplicons present |
+| `{gene}_single_track_cartoon` | Single-track matplotlib cartoon: CDS/UTR exon blocks with domain coloring and library amplicon crosshatch, ATG/Stop markers, and exon labels | If exon coordinates available and library amplicons present |
 
 ### Excel workbook (with `--excel`)
 
 | Sheet | Contents |
 |---|---|
-| `scores` | Full scores table with `Germline classification` (if ClinVar) and `gnomad_af` / `regeneron_af` (if AF files) merged in by `pos_id` |
-| `thresholds` | Non-functional and functional threshold values |
+| `scores` | Full scores table, including `RNA_score` (if present in allscores file) and `RNA_consequence` (if `--rna-threshold` supplied), with `Germline classification` (if ClinVar) and `gnomad_af` / `regeneron_af` (if AF files) merged in by `pos_id` |
+| `thresholds` | Non-functional threshold, functional threshold, and RNA threshold (the latter is `NaN` when `--rna-threshold` is not supplied) |
 | `counts` | Per-replicate SNV and deletion read counts |
 | `edit_rates` | Raw edit rates table (if edit rates file detected) |
 
@@ -232,6 +238,8 @@ The edit rates file is a tab-delimited `.tsv` with two columns:
 |---|---|
 | `target_rep` | Combined SGE target and replicate identifier (e.g. `CTCF_X10A_R1R4_D05`) |
 | `edit_rate` | Fractional library edit rate for that target/replicate |
+
+The header row is optional. If the file does not contain a header (or uses different column names), the pipeline assigns the column names `target_rep` and `edit_rate` in order automatically.
 
 The `target_rep` field is parsed as `{GENE}_X{target}_{rep}_{day}`. Replicate identifiers are mapped to display labels as follows:
 

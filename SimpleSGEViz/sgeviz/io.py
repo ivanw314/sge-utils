@@ -20,9 +20,9 @@ def find_genes(input_dir: Path) -> dict:
     Returns a dict mapping gene name -> files dict, e.g.:
         {"RAD51D": {"all_scores": Path(...), "snv_counts": Path(...), ...}}
     """
-    allscores_files = sorted(input_dir.glob("*allscores.tsv"))
+    allscores_files = sorted(input_dir.glob("*allscores*.tsv"))
     if not allscores_files:
-        raise FileNotFoundError(f"No '*allscores.tsv' files found in {input_dir}")
+        raise FileNotFoundError(f"No '*allscores*.tsv' files found in {input_dir}")
 
     def find_one(*patterns):
         for pattern in patterns:
@@ -53,14 +53,16 @@ def find_genes(input_dir: Path) -> dict:
 
     genes = {}
     for allscores_path in allscores_files:
-        # Handles both GENE.allscores.tsv and GENEallscores.tsv (with optional prefix)
+        # Handles GENE.allscores.tsv, GENEallscores.tsv, GENE.allscores.v1.2.1.tsv
+        # (with optional date/prefix before the last underscore-separated segment).
+        # Split on "allscores" and take whatever precedes it, stripping a trailing dot.
         stem_part = allscores_path.stem.split("_")[-1]
-        gene = stem_part.removesuffix(".allscores").removesuffix("allscores")
+        gene = stem_part.split("allscores")[0].rstrip(".")
         genes[gene] = {
             "all_scores": allscores_path,
-            "model_params": find_one(f"*{gene}modelparams.tsv", f"*{gene}.modelparams.tsv"),
-            "snv_counts": find_one(f"*{gene}snvcounts.tsv", f"*{gene}.snvcounts.tsv"),
-            "del_counts": find_one(f"*{gene}delcounts.tsv", f"*{gene}.delcounts.tsv"),
+            "model_params": find_optional(f"*{gene}*modelparams*.tsv"),
+            "snv_counts": find_one(f"*{gene}*snvcounts*.tsv"),
+            "del_counts": find_one(f"*{gene}*delcounts*.tsv"),
             # Optional allele frequency files (CSV or Excel)
             "gnomad": find_optional(f"*{gene}*gnomAD*"),
             "regeneron": find_optional(f"*{gene}*Regeneron*"),
@@ -360,16 +362,39 @@ def load_targets(files: dict) -> "pd.DataFrame | None":
     )
 
 
+_EDIT_RATE_COLS = ["target_rep", "edit_rate"]
+
+
 def load_edit_rates(files: dict):
     """Load an edit rates TSV file if present.
 
-    Expected columns: target_rep, edit_rate.
+    Expected columns: target_rep, edit_rate. If the file has no header row (or
+    wrong column names), the two columns are assigned those names in order.
     Returns the raw DataFrame or None if no edit rates file was detected.
     """
     path = files.get("edit_rates")
     if path is None:
         return None
-    return pd.read_csv(path, sep="\t")
+    df = pd.read_csv(path, sep="\t")
+    if not all(c in df.columns for c in _EDIT_RATE_COLS):
+        df = pd.read_csv(path, sep="\t", header=None, names=_EDIT_RATE_COLS)
+    return df
+
+
+def save_matplotlib_figure(fig, path: Path):
+    """Save a matplotlib figure. Format is inferred from the extension.
+
+    PNG and SVG are supported. If the path has an .html extension (e.g. when
+    running with --format html) it is saved as PNG instead.
+    """
+    import matplotlib.pyplot as plt
+
+    if path.suffix == ".html":
+        print(f"  Warning: HTML output is not supported for {path.stem}; saving as PNG instead.")
+        path = path.with_suffix(".png")
+    fig.savefig(str(path), bbox_inches="tight")
+    plt.close(fig)
+    print(f"  Saved: {path.name}")
 
 
 def save_figure(chart: alt.Chart, path: Path):

@@ -9,8 +9,12 @@ def load_scores(files: dict):
 
     SNVs and deletions are read from the same *allscores.tsv file and
     distinguished by ref allele length (1 = SNV, 4 = 3bp deletion).
-    Thresholds are derived from the functional_consequence classifications
-    already present in the scores file (GMM approach).
+
+    Thresholds are taken from the modelparams file (thresh_abnormal,
+    thresh_normal) when present. If the modelparams file is absent, thresholds
+    are estimated from the GMM classifications in the allscores file. If the
+    modelparams thresholds appear inverted (abnormal > normal), the user is
+    warned and offered the option to fall back to the GMM estimate.
 
     Returns:
         df: combined scores dataframe with standardized consequence labels
@@ -19,12 +23,35 @@ def load_scores(files: dict):
     snv_df = _read_snv_scores(files["all_scores"])
     del_df = _read_del_scores(files["all_scores"])
 
-    thresholds = _get_gmm_thresholds(snv_df)
+    model_params_path = files.get("model_params")
+    if model_params_path is not None:
+        thresholds = _read_modelparams_thresholds(model_params_path)
+        if thresholds[0] > thresholds[1]:
+            import warnings
+            warnings.warn(
+                f"modelparams thresh_abnormal ({thresholds[0]:.4f}) is greater than "
+                f"thresh_normal ({thresholds[1]:.4f}) — thresholds appear inverted or are incorrect.",
+                UserWarning,
+                stacklevel=2,
+            )
+            answer = input(
+                "  Fall back to estimating thresholds from the data instead? [y/N]: "
+            ).strip().lower()
+            if answer == "y":
+                thresholds = _get_gmm_thresholds(snv_df)
+    else:
+        thresholds = _get_gmm_thresholds(snv_df)
 
     df = pd.concat([snv_df, del_df], ignore_index=True)
     df = _rename_consequences(df)
 
     return df, thresholds
+
+
+def _read_modelparams_thresholds(path: Path) -> list:
+    """Read thresh_abnormal and thresh_normal from a modelparams TSV file."""
+    mp = pd.read_csv(path, sep="\t")
+    return [float(mp["thresh_abnormal"].iloc[0]), float(mp["thresh_normal"].iloc[0])]
 
 
 def _get_gmm_thresholds(snv_df: pd.DataFrame) -> list:
@@ -206,6 +233,23 @@ def _read_regeneron(path: Path) -> pd.DataFrame:
         lambda x: x.split(":")[1] + ":" + x.split(":")[3]
     )
     return df[["pos_id", "regeneron_maf"]]
+
+
+def apply_rna_threshold(df: pd.DataFrame, rna_threshold: float) -> pd.DataFrame:
+    """Add RNA_consequence column based on a precalculated RNA score threshold.
+
+    Variants with RNA_score >= threshold are labeled 'normal'; below are 'low'.
+    Rows where RNA_score is NaN receive NaN in RNA_consequence.
+    Returns df unchanged if the RNA_score column is absent.
+    """
+    if "RNA_score" not in df.columns:
+        return df
+    df = df.copy()
+    df["RNA_consequence"] = pd.NA
+    valid = df["RNA_score"].notna()
+    df.loc[valid & (df["RNA_score"] >= rna_threshold), "RNA_consequence"] = "normal"
+    df.loc[valid & (df["RNA_score"] < rna_threshold), "RNA_consequence"] = "low"
+    return df
 
 
 def load_vep(files: dict, scores_df: pd.DataFrame) -> pd.DataFrame:
