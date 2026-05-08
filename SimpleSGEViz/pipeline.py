@@ -333,6 +333,7 @@ def main():
                 cartoon_chart = gene_cartoon.make_exon_cartoon(
                     exon_df, meta_df,
                     exon_color=args.exon_color,
+                    domains_path=files.get("domains"),
                 )
                 cartoon_name = f"{gene}_exon_cartoon"
                 io.save_figure(
