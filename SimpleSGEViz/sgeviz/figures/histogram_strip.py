@@ -50,7 +50,7 @@ def _threshold_rules(thresholds: list):
     return nf_line, func_line
 
 
-def make_figures(df: pd.DataFrame, thresholds: list, gene: str = ""):
+def make_figures(df: pd.DataFrame, thresholds: list, gene: str = "", width: int = 800, height: int = 200):
     """Build histogram and strip plot charts.
 
     Returns:
@@ -98,8 +98,8 @@ def make_figures(df: pd.DataFrame, thresholds: list, gene: str = ""):
         ),
         opacity=alt.condition(selection, alt.value(1), alt.value(0.2)),
     ).add_params(selection, zoom_hist).properties(
-        width=800,
-        height=200,
+        width=width,
+        height=height,
         title=alt.TitleParams(
             text=f"Distribution of SGE Scores{' (' + gene + ')' if gene else ''} (n = {n})",
             fontSize=22,
@@ -133,7 +133,7 @@ def make_figures(df: pd.DataFrame, thresholds: list, gene: str = ""):
             legend=None,
             scale=alt.Scale(range=PALETTE, domain=VARIANT_TYPES),
         ),
-    ).add_params(zoom_strip).properties(width=800, height=200)
+    ).add_params(zoom_strip).properties(width=width, height=height)
 
     stripplot = alt.layer(stripplot, nf_line, func_line).resolve_scale(y="shared")
 

@@ -5,7 +5,7 @@ from natsort import natsorted
 from .base import PALETTE, VARIANT_TYPES
 
 
-def make_plot(df: pd.DataFrame, thresholds: list, gene: str = "") -> alt.Chart:
+def make_plot(df: pd.DataFrame, thresholds: list, gene: str = "", width: int = 600, height: int = 150) -> alt.Chart:
     """Generate a faceted scatter plot of SGE scores across gene exons.
 
     Each exon gets its own panel with an independent x-axis (genomic coordinates).
@@ -58,7 +58,7 @@ def make_plot(df: pd.DataFrame, thresholds: list, gene: str = "") -> alt.Chart:
                 orient="bottom",
             ),
         ),
-    ).properties(width=600, height=150)
+    ).properties(width=width, height=height)
 
     nf_line = alt.Chart(df).mark_rule(
         color="black", strokeDash=[8, 8], strokeWidth=1

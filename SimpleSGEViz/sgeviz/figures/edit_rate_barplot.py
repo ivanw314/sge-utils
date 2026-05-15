@@ -24,7 +24,7 @@ def _natsort_key(s: str) -> list:
     return [int(c) if c.isdigit() else c.lower() for c in re.split(r"(\d+)", s)]
 
 
-def make_plot(df: pd.DataFrame, gene: str = "") -> alt.Chart:
+def make_plot(df: pd.DataFrame, gene: str = "", bar_width: int = 35, height: int = 200) -> alt.Chart:
     """Return a faceted bar chart of library edit rates by target and replicate.
 
     Args:
@@ -84,7 +84,7 @@ def make_plot(df: pd.DataFrame, gene: str = "") -> alt.Chart:
                 ),
             ),
         )
-        .properties(width=35, height=200)
+        .properties(width=bar_width, height=height)
         .configure_facet(spacing=5)
         .configure_axis(grid=False)
     )

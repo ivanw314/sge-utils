@@ -48,7 +48,7 @@ def _compute_roc(df: pd.DataFrame):
     return pd.DataFrame({"FPR": fprs, "TPR": tprs}), auc_val
 
 
-def make_strip(df: pd.DataFrame, thresholds: list, gene: str = "") -> alt.Chart:
+def make_strip(df: pd.DataFrame, thresholds: list, gene: str = "", width: int = 700, height: int = 250) -> alt.Chart:
     """Generate ClinVar classification strip plot.
 
     Per-variant SGE scores arranged by germline classification, colored by
@@ -96,7 +96,7 @@ def make_strip(df: pd.DataFrame, thresholds: list, gene: str = "") -> alt.Chart:
             legend=alt.Legend(titleFontSize=16, labelFontSize=14),
         ),
         tooltip=["pos_id:N", "score:Q", "Consequence:N", "Germline classification:N"],
-    ).properties(width=700, height=250)
+    ).properties(width=width, height=height)
 
     # Per-classification count annotations pinned to the left edge
     summary = (
@@ -123,7 +123,7 @@ def make_strip(df: pd.DataFrame, thresholds: list, gene: str = "") -> alt.Chart:
     )
 
 
-def make_roc(df: pd.DataFrame, gene: str = "") -> alt.Chart | None:
+def make_roc(df: pd.DataFrame, gene: str = "", width: int = 350, height: int = 350) -> alt.Chart | None:
     """Generate ROC curve for SGE score classifying B/LB vs P/LP ClinVar variants.
 
     Returns None if there are insufficient variants in both classes.
@@ -171,8 +171,8 @@ def make_roc(df: pd.DataFrame, gene: str = "") -> alt.Chart | None:
     return (
         alt.layer(diag_line, roc_line, auc_label)
         .properties(
-            width=350,
-            height=350,
+            width=width,
+            height=height,
             title=alt.TitleParams(text=title, fontSize=22),
         )
         .configure_axis(grid=False)
