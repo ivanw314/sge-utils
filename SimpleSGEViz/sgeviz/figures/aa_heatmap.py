@@ -427,6 +427,8 @@ def make_plot(
     ).properties(width=width, height=height_per_row * len(_AA_ORDER))
 
     if has_vep:
+        for col in vep_cols_present:
+            snv_df[col] = pd.to_numeric(snv_df[col], errors="coerce")
         vep_summary = (
             snv_df.groupby("AApos")[list(vep_cols_present.keys())]
             .mean()
