@@ -8,7 +8,9 @@ A collection of tools for Saturation Genome Editing (SGE) workflows, covering ol
 
 ```
 sge-utils/
-├── notebook_utils/           # Jupyter notebooks for SGE library design
+├── notebook_utils/
+│   ├── standalone_sgeviz/    # Standalone notebooks for individual figure generation
+│   └── ...                   # SGE library design notebooks
 ├── SimpleSGEViz/             # CLI pipeline for SGE fitness score visualization
 └── useful_scripts/           # Standalone utilities for SGE data processing and visualization
 ```
@@ -34,6 +36,29 @@ pip install -e .
 ---
 
 ## notebook_utils
+
+### standalone_sgeviz
+
+Standalone Jupyter notebooks for generating individual `sgeviz` figures without running the full pipeline. Each notebook loads data directly from the multi-sheet Excel workbook produced by `sgeviz --excel` (`*_data.xlsx`) and saves a PNG by default (change the extension to `.html` for interactive output or `.svg` as needed).
+
+| Notebook | Figure | Required sheets |
+|---|---|---|
+| `histogram_stripplot.ipynb` | Score distribution histogram + strip plot | `scores`, `thresholds` |
+| `correlation_heatmap.ipynb` | Replicate Pearson r heatmap | `counts` |
+| `scores_across_gene.ipynb` | Per-exon score scatter | `scores`, `thresholds` |
+| `aa_heatmap.ipynb` | Amino acid substitution heatmap | `scores`, `thresholds` |
+| `predictor_scatter.ipynb` | SGE vs. computational predictor scatter | `scores`, `thresholds` |
+| `clinvar.ipynb` | ClinVar strip plot + ROC curve | `scores`, `thresholds` |
+| `rna_score.ipynb` | RNA score scatter + stem plot | `scores`, `thresholds` |
+| `edit_rate_barplot.ipynb` | Library edit rate barplot | `edit_rates` |
+
+Each notebook has a `# --- Plot customization (optional) ---` block in its configuration cell exposing width, height, and relevant axis/color domain parameters (e.g. `score_domain`, `rna_domain`, `panel_width`). These map directly to new keyword arguments on the underlying figure functions and default to the same values used by the pipeline.
+
+**Requirements:** `sge-utils` conda environment with `sgeviz` installed. PNG/SVG output additionally requires `vl-convert-python` (`pip install vl-convert-python`).
+
+---
+
+### Library design notebooks
 
 Interactive Jupyter notebooks for generating SGE oligo libraries and clonal homology arms for golden gate cloning.
 
@@ -119,6 +144,19 @@ The pipeline auto-detects genes in the input directory and produces figures for 
 | `*{gene}delcounts.tsv` | Per-replicate 3bp deletion read counts |
 
 Optional files (ClinVar, gnomAD, domain annotations, VEP output, edit rates, targets) are auto-detected by filename. See [SimpleSGEViz/README.md](SimpleSGEViz/README.md) for full input/output specifications.
+
+### Figure customization
+
+All figure functions in `sgeviz.figures` now accept explicit `width`, `height`, and domain parameters so that individual plots can be resized or re-ranged without touching the pipeline. The pipeline itself continues to use the original defaults. The standalone notebooks in `notebook_utils/standalone_sgeviz/` expose these parameters in a dedicated configuration block.
+
+| Parameter | Applies to | Default |
+|---|---|---|
+| `width`, `height` | All figures | varies per figure |
+| `score_domain` | `aa_heatmap`, `rna_score.make_scatter` | `(-0.2, 0)` / `(-0.6, 0.3)` |
+| `rna_domain` | `rna_score.make_scatter`, `rna_score.make_stem_plot` | `(-8, 3)` |
+| `height_per_row` | `aa_heatmap` | `25` |
+| `panel_width`, `panel_height` | `predictor_scatter` | `350`, `250` |
+| `bar_width` | `edit_rate_barplot` | `35` |
 
 ---
 
