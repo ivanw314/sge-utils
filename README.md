@@ -59,6 +59,25 @@ Each notebook has a `# --- Plot customization (optional) ---` block in its confi
 
 **Requirements:** `sge-utils` conda environment with `sgeviz` installed. PNG/SVG output additionally requires `vl-convert-python` (`pip install vl-convert-python`).
 
+#### Usage
+
+**VS Code**
+
+1. Open the notebook file (`.ipynb`) in VS Code.
+2. When prompted to select a kernel, choose the `sge-utils` conda environment. If it doesn't appear, install the [Jupyter extension](https://marketplace.visualstudio.com/items?itemName=ms-toolsai.jupyter) and ensure the environment is registered with `python -m ipykernel install --user --name sge-utils`.
+3. Edit the `# --- Configuration ---` cell: set `excel_path` (or `gene`/`targets_path` for cartoon notebooks) to point to your files.
+4. Run all cells with **Run All** (⇧⌘↩ on Mac, Ctrl+Alt+Enter on Windows/Linux) or step through cells individually with ⇧↩.
+
+**JupyterLab**
+
+1. Activate the environment and launch JupyterLab:
+   ```bash
+   conda activate sge-utils
+   jupyter lab
+   ```
+2. Navigate to `notebook_utils/standalone_sgeviz/` in the file browser and open the desired notebook.
+3. Edit the `# --- Configuration ---` cell with your file paths, then run all cells via **Run → Run All Cells**.
+
 ---
 
 ### Library design notebooks
