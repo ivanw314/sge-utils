@@ -46,7 +46,7 @@ def compute_correlations(counts_df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(records)
 
 
-def make_heatmap(df: pd.DataFrame, gene: str = "", subtitle: str = "") -> alt.Chart:
+def make_heatmap(df: pd.DataFrame, gene: str = "", subtitle: str = "", width: int = 600) -> alt.Chart:
     """Generate Pearson r heatmap across SGE targets and replicate comparisons."""
     targets = natsorted(df["Targets"].unique().tolist())
 
@@ -92,7 +92,7 @@ def make_heatmap(df: pd.DataFrame, gene: str = "", subtitle: str = "") -> alt.Ch
             ),
         ),
         tooltip=[alt.Tooltip("r_correlation", title="Pearson's r: ")],
-    ).properties(width=600, height=height)
+    ).properties(width=width, height=height)
 
     text_color = (
         alt.when(alt.datum.r_correlation > 0.5)
@@ -108,7 +108,7 @@ def make_heatmap(df: pd.DataFrame, gene: str = "", subtitle: str = "") -> alt.Ch
     return rect + text
 
 
-def make_combined_heatmap(counts_df: pd.DataFrame, gene: str = "") -> alt.Chart:
+def make_combined_heatmap(counts_df: pd.DataFrame, gene: str = "", width: int = 600) -> alt.Chart:
     """Generate three horizontally stacked correlation heatmaps: SNV-only, deletion-only, and combined."""
     subsets = [
         (counts_df.loc[counts_df["var_type"] == "snv"], "SNV Only"),
@@ -121,6 +121,6 @@ def make_combined_heatmap(counts_df: pd.DataFrame, gene: str = "") -> alt.Chart:
         r_df = compute_correlations(subset_df)
         if r_df.empty:
             continue
-        charts.append(make_heatmap(r_df, gene=gene, subtitle=label))
+        charts.append(make_heatmap(r_df, gene=gene, subtitle=label, width=width))
 
     return alt.hconcat(*charts)

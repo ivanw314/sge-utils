@@ -34,7 +34,7 @@ _PANEL_W = 350
 _PANEL_H = 250
 
 
-def make_plot(df: pd.DataFrame, thresholds: list, gene: str = "") -> alt.Chart | None:
+def make_plot(df: pd.DataFrame, thresholds: list, gene: str = "", panel_width: int = _PANEL_W, panel_height: int = _PANEL_H) -> alt.Chart | None:
     """Generate predictor vs. SGE fitness score scatter panels.
 
     One scatter panel is produced per available predictor, arranged two-per-row.
@@ -104,8 +104,8 @@ def make_plot(df: pd.DataFrame, thresholds: list, gene: str = "") -> alt.Chart |
                 alt.Tooltip(f"{display}:Q", title=display, format=".3f"),
             ],
         ).properties(
-            width=_PANEL_W,
-            height=_PANEL_H,
+            width=panel_width,
+            height=panel_height,
             title=alt.TitleParams(
                 text=f"{gene + ' — ' if gene else ''}{display} vs. Fitness Score",
                 fontSize=15,

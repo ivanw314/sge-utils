@@ -333,6 +333,8 @@ def make_plot(
     protein_length: int | None = None,
     px_per_aa: int = 3,
     aa_exon_df: "pd.DataFrame | None" = None,
+    score_domain: tuple = (-0.2, 0),
+    height_per_row: int = 25,
 ) -> alt.Chart:
     """Generate amino acid substitution heatmap of SGE fitness scores.
 
@@ -377,7 +379,6 @@ def make_plot(
     n = len(snv_df)
     n_del = int((df["var_type"] == "3bp_del").sum()) if "var_type" in df.columns else 0
     width = px_per_aa * prot_length
-    height_per_row = 25
 
     # Missense min/mean rows (exclude stop gained)
     mis_df = snv_df.loc[snv_df["Consequence"] != "Stop Gained"]
@@ -421,12 +422,14 @@ def make_plot(
         color=alt.Color(
             "score:Q",
             title="Fitness Score",
-            scale=alt.Scale(domain=[-0.2, 0], clamp=True, scheme="bluepurple", reverse=True),
+            scale=alt.Scale(domain=list(score_domain), clamp=True, scheme="bluepurple", reverse=True),
             legend=alt.Legend(titleFontSize=18, labelFontSize=16),
         ),
     ).properties(width=width, height=height_per_row * len(_AA_ORDER))
 
     if has_vep:
+        for col in vep_cols_present:
+            snv_df[col] = pd.to_numeric(snv_df[col], errors="coerce")
         vep_summary = (
             snv_df.groupby("AApos")[list(vep_cols_present.keys())]
             .mean()

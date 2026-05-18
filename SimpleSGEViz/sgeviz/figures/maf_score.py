@@ -2,7 +2,7 @@ import altair as alt
 import pandas as pd
 
 
-def make_plot(df: pd.DataFrame, gene: str = "") -> alt.Chart:
+def make_plot(df: pd.DataFrame, gene: str = "", width: int = 300, height: int = 250) -> alt.Chart:
     """Generate a 2D binned heatmap of log10(Allele Frequency) vs. SGE fitness score.
 
     Each bin is colored by the count of variants it contains. If both gnomAD and
@@ -47,8 +47,8 @@ def make_plot(df: pd.DataFrame, gene: str = "") -> alt.Chart:
             ),
         ),
     ).properties(
-        width=300,
-        height=250,
+        width=width,
+        height=height,
         title=alt.TitleParams(text=title, fontSize=22),
     ).configure_axis(
         grid=False

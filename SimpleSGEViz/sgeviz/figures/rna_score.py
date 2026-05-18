@@ -62,6 +62,10 @@ def make_scatter(
     thresholds: list,
     rna_threshold: float | None = None,
     gene: str = "",
+    width: int = 400,
+    height: int = 300,
+    score_domain: tuple = (-0.6, 0.3),
+    rna_domain: tuple = (-8, 3),
 ) -> alt.Chart:
     """RNA score vs. fitness score scatter plot.
 
@@ -87,7 +91,7 @@ def make_scatter(
                     titleFontSize=20,
                     values=[-8, -6, -4, -2, 0, 2],
                 ),
-                scale=alt.Scale(domain=[-8, 3]),
+                scale=alt.Scale(domain=list(rna_domain)),
             ),
             y=alt.Y(
                 "snv_score:Q",
@@ -97,7 +101,7 @@ def make_scatter(
                     titleFontSize=20,
                     values=[-0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3],
                 ),
-                scale=alt.Scale(domain=[-0.6, 0.3]),
+                scale=alt.Scale(domain=list(score_domain)),
             ),
             color=alt.Color(
                 "Consequence:N",
@@ -115,8 +119,8 @@ def make_scatter(
             tooltip=tooltips,
         )
         .properties(
-            width=400,
-            height=300,
+            width=width,
+            height=height,
             title=alt.TitleParams(
                 text=f"Fitness Score vs. RNA Score{' (' + gene + ')' if gene else ''}",
                 subtitle=f"n = {len(df)}",
@@ -159,6 +163,9 @@ def make_stem_plot(
     scores_df: pd.DataFrame,
     rna_threshold: float,
     gene: str = "",
+    width: int = 600,
+    height: int = 150,
+    rna_domain: tuple = (-8, 3),
 ) -> alt.Chart:
     """Faceted stem plot of RNA scores per exon.
 
@@ -211,7 +218,7 @@ def make_stem_plot(
                 titleFontSize=22,
                 values=[-8, -6, -4, -2, 0, 2],
             ),
-            scale=alt.Scale(domain=[-8, 3], padding=5),
+            scale=alt.Scale(domain=list(rna_domain), padding=5),
         ),
         color=alt.Color(
             "Consequence:N",
@@ -243,7 +250,7 @@ def make_stem_plot(
             ),
         ),
         tooltip=tooltips,
-    ).properties(width=600, height=150)
+    ).properties(width=width, height=height)
 
     stems = base.mark_rule().encode(
         x=alt.X("CDSpos:Q", scale=alt.Scale(zero=False, padding=1)),
