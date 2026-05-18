@@ -19,15 +19,12 @@ dependencies:
   - altair
   - matplotlib
   - seaborn
-  - vega_datasets          # useful sample datasets for altair examples
 
   # ── Bioinformatics ───────────────────────────────────
-  - pysam
   - pyfaidx
   - biopython
-  - samtools               # CLI available in env (used by pysam under the hood)
-  - bedtools 
-  - pybedtools              # essential for genomic interval operations
+  - samtools               # CLI available in env
+  - bedtools
 
   # ── Notebook + kernel ────────────────────────────────
   - jupyterlab
