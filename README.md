@@ -51,6 +51,9 @@ Standalone Jupyter notebooks for generating individual `sgeviz` figures without 
 | `clinvar.ipynb` | ClinVar strip plot + ROC curve | `scores`, `thresholds` |
 | `rna_score.ipynb` | RNA score scatter + stem plot | `scores`, `thresholds` |
 | `edit_rate_barplot.ipynb` | Library edit rate barplot | `edit_rates` |
+| `maf_vs_score.ipynb` | Allele frequency vs. fitness score heatmap | `scores` (requires `gnomad_af`/`regeneron_af` columns) |
+| `gene_cartoon.ipynb` | Gene exon structure or library amplicon cartoon | Ensembl API (internet required) |
+| `single_track_cartoon.ipynb` | Single-track library cartoon (matplotlib) | Ensembl API + targets TSV |
 
 Each notebook has a `# --- Plot customization (optional) ---` block in its configuration cell exposing width, height, and relevant axis/color domain parameters (e.g. `score_domain`, `rna_domain`, `panel_width`). These map directly to new keyword arguments on the underlying figure functions and default to the same values used by the pipeline.
 
@@ -157,6 +160,9 @@ All figure functions in `sgeviz.figures` now accept explicit `width`, `height`, 
 | `height_per_row` | `aa_heatmap` | `25` |
 | `panel_width`, `panel_height` | `predictor_scatter` | `350`, `250` |
 | `bar_width` | `edit_rate_barplot` | `35` |
+| `width`, `height` | `maf_score.make_plot` | `300`, `250` |
+| `width` | `gene_cartoon.make_exon_cartoon`, `make_library_cartoon` | `800` |
+| `fig_width` | `single_track_cartoon.make_plot` | `10` |
 
 ---
 
