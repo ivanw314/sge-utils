@@ -82,7 +82,18 @@ def read_scores(file, rna_score_threshold=None): #Reads score file
     df = df.loc[df['Consequence'].str.contains('missense_variant')] #Filters only for missense variants
 
     if rna_score_threshold is not None: #Optionally filter out variants below the RNA score threshold; NaN rows are kept
-        df = df.loc[df['RNA_score'].isna() | (df['RNA_score'] >= rna_score_threshold)]
+
+        columns = df.columns.tolist()
+        if 'RNA_score' in columns:
+            df = df.loc[df['RNA_score'].isna() | (df['RNA_score'] >= rna_score_threshold)]
+        elif 'RNAscore' in columns:
+            df = df.loc[df['RNAscore'].isna() | (df['RNAscore'] >= rna_score_threshold)]
+        else:
+            raise ValueError(
+                "rna_score_threshold was specified but neither 'RNA_score' nor 'RNAscore' "
+                "column was found in the score file. Available columns: "
+                + str(columns)
+            )
 
     df['AApos'] = df['AAsub'].transform(lambda x: int(x[1:-1])) #Creates new amino acid position column
 
