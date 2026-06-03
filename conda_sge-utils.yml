@@ -1,6 +1,5 @@
 name: sge-utils
 channels:
-  - bioconda
   - conda-forge
   - defaults
 
@@ -21,10 +20,9 @@ dependencies:
   - seaborn
 
   # ── Bioinformatics ───────────────────────────────────
-  - pyfaidx
   - biopython
-  - samtools               # CLI available in env
-  - bedtools
+  - pip:
+    - pyfaidx
 
   # ── Notebook + kernel ────────────────────────────────
   - jupyterlab
