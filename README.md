@@ -8,6 +8,9 @@ A collection of tools for Saturation Genome Editing (SGE) workflows, covering ol
 
 ```
 sge-utils/
+├── examples/
+│   ├── example_inputs/       # Example input files for the pipeline and notebooks
+│   └── example_outputs/      # Expected outputs from the example inputs
 ├── notebook_utils/
 │   ├── standalone_sgeviz/    # Standalone notebooks for individual figure generation
 │   └── ...                   # SGE library design notebooks
@@ -43,6 +46,47 @@ For the visualization pipeline, also install the `sgeviz` package:
 cd SimpleSGEViz
 pip install -e .
 ```
+
+---
+
+## Examples
+
+Example input and output files for BARD1 are provided in `examples/` to help you verify your setup and explore expected outputs.
+
+### sgeviz pipeline
+
+Inputs in `examples/example_inputs/sgeviz/`:
+
+| File | Description |
+|---|---|
+| `BARD1.allscores.v1.2.1.tsv` | Combined SNV and 3bp deletion fitness scores |
+| `BARD1.modelparams.v1.2.1.tsv` | Fitness score thresholds |
+| `BARD1.snvcounts.tsv` | Per-replicate SNV read counts |
+| `BARD1.delcounts.tsv` | Per-replicate 3bp deletion read counts |
+| `BARD1.editrates.tsv` | Per-target edit rates |
+| `BARD1.targets.tsv` | Coordinates for library amplicons |
+| `BARD1_domains.xlsx` | Protein domain annotations |
+| `20240905_BARD1_gnomADv4.1.0_SNVs.xlsx` | gnomAD allele frequencies |
+| `20250912_BARD1_ClinVarSNVs_1StarPlus.txt` | ClinVar variant classifications |
+| `20251002_BARD1snvs_VEP.xlsx` | VEP output with computational predictor scores |
+
+To run the pipeline on the example data (working directory should be the repo root, `sge-utils/`):
+
+```bash
+sgeviz examples/example_inputs/sgeviz/ examples/example_outputs/sgeviz/ --format png --excel
+```
+
+Expected outputs are in `examples/example_outputs/sgeviz/` — `BARD1_data.xlsx` plus 13 figure PNGs in `fig_outputs/`.
+
+### SGE_ClonalHA_Generator
+
+- Input: `examples/example_inputs/clonalHA_generation/20260316_HA_clonalDNA_subset_HA1.fa`
+- Outputs: `examples/example_outputs/clonalHA_generation/` — clonal HA sequences and Golden Gate AMP primers as FASTA files
+
+### SGEoligos_SNVandFullMut_libs
+
+- Input: `examples/example_inputs/library_generation/20260317_SGE_All_Oligos_merged_recoded.xlsx`
+- Output: `examples/example_outputs/library_generation/` — oligo library as a text file
 
 ---
 
@@ -240,7 +284,7 @@ For `.xlsx` files, scores must be on a sheet named `scores`.
 | `save_legend` | `True` \| `False` | `False` | Prompt to save legend as PNG |
 | `dna_style` | `'stubs'` \| `'slab'` \| `'fill'` \| `'atoms'` | `'stubs'` | ssDNA display style |
 
-**Surface coloring:** The script targets atoms, cartoon, and surface (`target abcs`). For surface coloring to apply, show the surface before running the script (`surface` in the ChimeraX command line, or **Molecule Display → Surfaces → Show**).
+**Surface coloring:** The script targets atoms, cartoon, and surface (`target abcs`). For surface coloring to apply, show the surface **before** running the script (`surface` in the ChimeraX command line, or **Molecule Display → Surfaces → Show**).
 
 ---
 
