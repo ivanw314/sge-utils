@@ -19,7 +19,18 @@ sge-utils/
 
 ## Setup
 
-A conda environment file is provided with all dependencies:
+**1. Clone the repository**
+
+```bash
+git clone https://github.com/ivanw314/sge-utils.git
+cd sge-utils
+```
+
+**2. Install conda**
+
+If conda is not already installed, download and install [Miniconda](https://docs.anaconda.com/miniconda/) (recommended) or [Anaconda](https://www.anaconda.com/download).
+
+**3. Create and activate the environment**
 
 ```bash
 conda env create -f conda_sge-utils.yml
