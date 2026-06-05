@@ -263,10 +263,11 @@ runscript /path/to/SGEColor_ChimeraX_MissenseOnly.py
 |---|---|---|
 | 1 | PDB ID | Skipped if a structure is already open |
 | 2 | Aggregation method | Median / mean / min per-residue aggregation |
-| 3 | Score settings | Default or custom: score column, color range, color direction |
+| 3 | Score settings | Default or custom: color range, color direction (score column deferred to file-load in custom mode) |
 | 4 | Colorbar legend | Don't show / show / show and save |
 | 5 | SGE score file | File picker; accepts `.xlsx`, `.tsv`, `.csv` |
 | — | Sheet selection | Shown for multi-sheet `.xlsx` files; `scores` pre-selected if present |
+| — | Score column | Shown in custom mode after file/sheet load; dropdown of all columns in the file |
 | 6 | Chain selection | Dropdown of chains in the loaded structure |
 | 7 | RNA score filter | Optional — cancel to skip |
 | 8 | Add another? | Repeat steps 5–7 for additional chains |

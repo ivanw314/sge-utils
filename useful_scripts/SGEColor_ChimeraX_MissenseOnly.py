@@ -45,13 +45,16 @@ Shown once per run:
   1. PDB ID           — prompted only if no structure is currently loaded.
                         If a model is already open, that structure is used as-is.
   2. Aggregation      — choose median / mean / min per-residue aggregation.
-  3. Score settings   — use defaults or override: score column, color range,
-                        color direction (white=high or red=high).
+  3. Score settings   — use defaults or override color range and direction.
+                        If Custom is chosen, score column is deferred to step 5
+                        so it can be picked from the actual file's columns.
   4. Colorbar legend  — don't show / show / show and save.
 
 Repeated per gene/chain:
   5. SGE score file   — file picker; accepts .xlsx, .tsv, .csv.
      Sheet selection  — shown immediately after for multi-sheet .xlsx files.
+     Score column     — shown immediately after (custom mode only): dropdown of
+                        all columns in the loaded file.
   6. Chain selection  — dropdown of chains in the loaded structure.
   7. RNA filter       — optional threshold; cancel to skip.
   8. Add another?     — repeat steps 5–7 for additional chains.
@@ -126,8 +129,9 @@ import matplotlib.cm as cm
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 
-analysis_type = 'med'   # 'med', 'mean', or 'min' — aggregation method per residue
-score_column  = 'score' # column in the score file to use for coloring
+analysis_type      = 'med'   # 'med', 'mean', or 'min' — aggregation method per residue
+score_column       = 'score' # column in the score file to use for coloring
+custom_score_mode  = False   # True when the user chose Custom settings; triggers score column picker at file-load time
 clamp_min     = -0.2    # lower bound for color normalization range
 clamp_max     = 0.0     # upper bound for color normalization range
 high_is_red   = False   # False → high score = white, low = red (default); True → high = red, low = white
@@ -136,24 +140,28 @@ save_legend = False     # whether to save the legend figure
 dna_style = 'stubs'     # ssDNA display style: 'stubs', 'slab', 'fill', or 'atoms'
 
 
-def resolve_column(df, expected_name, description, parent):
-    """Return expected_name if present; otherwise show a picker so the user can select the right column."""
-    if expected_name in df.columns:
+def resolve_column(df, expected_name, description, parent, force_pick=False):
+    """Return expected_name if present (and force_pick is False); otherwise show a picker so the user can select the right column."""
+    if not force_pick and expected_name in df.columns:
         return expected_name
-    chosen, ok = QInputDialog.getItem(
-        parent,
-        f'Column Not Found: "{expected_name}"',
-        f'Expected column "{expected_name}" ({description})\n'
-        f'was not found in this file.\n\n'
-        f'Select the column that corresponds to it:',
-        df.columns.tolist(), 0, False)
+    if force_pick:
+        title = f'Select Score Column'
+        msg   = f'Select the column to use as the score ({description}):'
+        default_idx = df.columns.tolist().index(expected_name) if expected_name in df.columns else 0
+    else:
+        title = f'Column Not Found: "{expected_name}"'
+        msg   = (f'Expected column "{expected_name}" ({description})\n'
+                 f'was not found in this file.\n\n'
+                 f'Select the column that corresponds to it:')
+        default_idx = 0
+    chosen, ok = QInputDialog.getItem(parent, title, msg, df.columns.tolist(), default_idx, False)
     if not ok:
         raise ValueError(f'Required column "{expected_name}" not found and not remapped — aborting.')
     return chosen
 
 
 def read_scores(file, parent, rna_score_threshold=None): #Reads score file
-    global score_column
+    global score_column, custom_score_mode
     ext = os.path.splitext(file)[1].lower()
     if ext == '.xlsx':
         xl = pd.ExcelFile(file)
@@ -182,7 +190,8 @@ def read_scores(file, parent, rna_score_threshold=None): #Reads score file
     consequence_col = resolve_column(df, 'consequence',       'identifies missense variants', parent)
     aa_change_col   = resolve_column(df, 'amino_acid_change',
                                      'amino acid substitution — accepts A123G, p.Met123Val, NP_xxx:p.Met123Lys, etc.', parent)
-    score_col       = resolve_column(df, score_column,        'numeric score used for coloring', parent)
+    score_col       = resolve_column(df, score_column,        'numeric score used for coloring', parent,
+                                     force_pick=custom_score_mode)
     if score_col != score_column:
         score_column = score_col  # keep legend label in sync
 
@@ -366,8 +375,9 @@ def find_best_offset(ref_aa_by_pos, chain_residue_map, max_offset=500):
 
 
 def get_score_config(session):
-    """Ask aggregation method and legend preference (always); optionally override score_column / clamp range / color direction."""
-    global analysis_type, score_column, clamp_min, clamp_max, high_is_red, show_legend, save_legend
+    """Ask aggregation method and legend preference (always); optionally override clamp range / color direction.
+    When Custom is chosen, score column selection is deferred to file-load time so the user picks from actual columns."""
+    global analysis_type, score_column, clamp_min, clamp_max, high_is_red, show_legend, save_legend, custom_score_mode
     parent = session.ui.main_window
 
     # Aggregation method — always asked
@@ -386,13 +396,8 @@ def get_score_config(session):
          'Custom score column / range / color direction'],
         0, False)
     if ok and mode.startswith('Custom'):
-        # Score column
-        col, ok = QInputDialog.getText(
-            parent, 'Score Column',
-            'Score column name in the input file:',
-            text=score_column)
-        if ok and col.strip():
-            score_column = col.strip()
+        custom_score_mode = True
+        # Score column is selected after the file is loaded so the user picks from actual column names.
 
         # Clamp range — min
         cmin, ok = QInputDialog.getDouble(
