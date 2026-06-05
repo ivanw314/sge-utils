@@ -378,6 +378,7 @@ def get_score_config(session):
     """Ask aggregation method and legend preference (always); optionally override clamp range / color direction.
     When Custom is chosen, score column selection is deferred to file-load time so the user picks from actual columns."""
     global analysis_type, score_column, clamp_min, clamp_max, high_is_red, show_legend, save_legend, custom_score_mode
+    custom_score_mode = False  # reset each run so Default doesn't inherit a previous Custom choice
     parent = session.ui.main_window
 
     # Aggregation method — always asked
@@ -437,34 +438,25 @@ def get_score_config(session):
         save_legend = legend_choice == 'Show and save legend'
 
 
-def get_gene_configs(session, available_chains):
+def get_gene_config(session, available_chains):
+    """Collect file, chain, and RNA filter for a single chain. Returns (file_path, chain_id, rna_threshold) or None if cancelled."""
     parent = session.ui.main_window
-    gene_configs = []
-    while True:
-        file_path, _ = QFileDialog.getOpenFileName(
-            parent, 'Select SGE Score File', '',
-            'Score Files (*.xlsx *.tsv *.csv);;Excel (*.xlsx);;TSV (*.tsv);;CSV (*.csv)')
-        if not file_path:
-            break
-        chain_id, ok = QInputDialog.getItem(
-            parent, 'Select Chain',
-            f'Chain for {os.path.basename(file_path)}:',
-            available_chains, 0, False)
-        if not ok:
-            break
-        rna_threshold, ok = QInputDialog.getDouble(
-            parent, 'RNA Score Filter (optional)',
-            'Exclude variants where RNA_score is below (cancel to skip):',
-            0.0, -10.0, 10.0, 3)
-        rna_score_threshold = rna_threshold if ok else None
-        gene_configs.append((file_path, chain_id, rna_score_threshold))
-        again, ok = QInputDialog.getText(
-            parent, 'Add Another?', 'Color another gene/chain? (y/n):')
-        if not ok or again.strip().lower() != 'y':
-            break
-    if not gene_configs:
-        raise ValueError('No data files specified — script aborted.')
-    return gene_configs
+    file_path, _ = QFileDialog.getOpenFileName(
+        parent, 'Select SGE Score File', '',
+        'Score Files (*.xlsx *.tsv *.csv);;Excel (*.xlsx);;TSV (*.tsv);;CSV (*.csv)')
+    if not file_path:
+        return None
+    chain_id, ok = QInputDialog.getItem(
+        parent, 'Select Chain',
+        f'Chain for {os.path.basename(file_path)}:',
+        available_chains, 0, False)
+    if not ok:
+        return None
+    rna_threshold, ok = QInputDialog.getDouble(
+        parent, 'RNA Score Filter (optional)',
+        'Exclude variants where RNA_score is below (cancel to skip):',
+        0.0, -10.0, 10.0, 3)
+    return (file_path, chain_id, rna_threshold if ok else None)
 
 
 def main():  # 'session' is injected as a global by ChimeraX at runtime via runscript
@@ -493,22 +485,29 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
     else:
         print(f'Existing session detected ({len(existing_models)} model(s) open). Skipping structure load — applying colors only.')
 
-    get_score_config(session)
-
-    legend = create_colorbar_legend()
-    if save_legend:
-        save_path, _ = QFileDialog.getSaveFileName(parent, 'Save Legend', '', 'PNG Files (*.png)')
-        if save_path:
-            legend.savefig(save_path, dpi=500)
-    if not show_legend:
-        plt.close(legend)  # not displayed — discard immediately so it doesn't accumulate
-
     models = session.models.list()
     available_chains = sorted(set(c.chain_id for m in models if hasattr(m, 'chains') for c in m.chains))
 
-    gene_configs = get_gene_configs(session, available_chains)
+    first_chain = True
+    while True:
+        get_score_config(session)
 
-    for file_path, chain_id, rna_score_threshold in gene_configs:
+        legend = create_colorbar_legend()
+        if save_legend:
+            save_path, _ = QFileDialog.getSaveFileName(parent, 'Save Legend', '', 'PNG Files (*.png)')
+            if save_path:
+                legend.savefig(save_path, dpi=500)
+        if not show_legend:
+            plt.close(legend)
+
+        config = get_gene_config(session, available_chains)
+        if config is None:
+            if first_chain:
+                raise ValueError('No data files specified — script aborted.')
+            break
+        first_chain = False
+        file_path, chain_id, rna_score_threshold = config
+
         label = os.path.basename(file_path)
         print(f'Reading SGE scores from {label}...')
         raw_scores = read_scores(file_path, parent, rna_score_threshold)
@@ -546,6 +545,7 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
         # aren't buried under ChimeraX command output.
         validation_log = []
         serious_issue = False
+        skip_chain = False
         n_scored  = len(normalized_values)
         common    = set(normalized_values) & set(chain_residue_map)
         missing   = sorted(set(normalized_values) - set(chain_residue_map))
@@ -563,128 +563,135 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
                 0, False)
             if ok and range_ok.startswith('No'):
                 print(f'Skipping coloring for chain {chain_id} — residue range rejected.')
-                continue
+                skip_chain = True
         if missing:
             preview = missing[:10]
             suffix  = f' ... and {len(missing) - 10} more' if len(missing) > 10 else ''
             validation_log.append(f'  Note: {len(missing)} scored position(s) not found in chain {chain_id}: {preview}{suffix}')
 
-        # Amino-acid identity
-        n_checked = n_mismatched = 0
-        identity_pct = 0.0
-        mismatch_positions = set()
-        mismatch_details = []
-        for pos in sorted(common):
-            ref_1letter = ref_aa_by_pos.get(pos)
-            expected = AA_ONE_TO_THREE.get(ref_1letter) if ref_1letter else None
-            actual = chain_residue_map[pos]
-            if expected:
-                n_checked += 1
-                actual_canonical = NONSTANDARD_TO_CANONICAL.get(actual, actual)
-                if actual_canonical != expected:
-                    n_mismatched += 1
-                    mismatch_positions.add(pos)
-                    mismatch_details.append(
-                        f'  pos {pos}: score file expects {ref_1letter} ({expected}), chain has {actual}')
+        if not skip_chain:
+            # Amino-acid identity
+            n_checked = n_mismatched = 0
+            identity_pct = 0.0
+            mismatch_positions = set()
+            mismatch_details = []
+            for pos in sorted(common):
+                ref_1letter = ref_aa_by_pos.get(pos)
+                expected = AA_ONE_TO_THREE.get(ref_1letter) if ref_1letter else None
+                actual = chain_residue_map[pos]
+                if expected:
+                    n_checked += 1
+                    actual_canonical = NONSTANDARD_TO_CANONICAL.get(actual, actual)
+                    if actual_canonical != expected:
+                        n_mismatched += 1
+                        mismatch_positions.add(pos)
+                        mismatch_details.append(
+                            f'  pos {pos}: score file expects {ref_1letter} ({expected}), chain has {actual}')
 
-        if n_checked:
-            identity_pct = 100 * (n_checked - n_mismatched) / n_checked
-            if n_mismatched == 0:
-                validation_log.append(f'Sequence identity: {n_checked}/{n_checked} positions match chain {chain_id} (100%) ✓')
-            else:
-                validation_log.append(f'Sequence identity: {n_checked - n_mismatched}/{n_checked} positions match '
-                                       f'chain {chain_id} ({identity_pct:.0f}%)')
-                preview = mismatch_details[:10]
-                suffix  = f'\n  ... and {len(mismatch_details) - 10} more' if len(mismatch_details) > 10 else ''
-                validation_log.append('\n'.join(preview) + suffix)
-                if identity_pct < 80:
-                    serious_issue = True
-                    validation_log.append(f'  *** LOW SEQUENCE IDENTITY — more than 20% of positions do not match chain {chain_id}.'
-                                          f' You may have selected the wrong chain or gene. ***')
-
-        # --- Residue number offset detection ---
-        # Offset dialog runs now (affects coloring); result appended to deferred log.
-        if n_checked == 0 or identity_pct < 90:
-            print('Scanning for residue number offset (e.g. signal peptide, PDB renumbering)...')
-            best_offset, best_matches, n_checkable = find_best_offset(ref_aa_by_pos, chain_residue_map)
-            current_matches = (n_checked - n_mismatched) if n_checked else 0
-            improvement = best_matches - current_matches
-
-            if best_offset != 0 and n_checkable > 0 and improvement > max(5, 0.05 * n_checkable):
-                best_pct = 100 * best_matches / n_checkable
-                choice, ok = QInputDialog.getItem(
-                    parent, 'Residue Number Offset Detected',
-                    f'Applying an offset of {best_offset:+d} to score-file positions\n'
-                    f'improves sequence identity from {identity_pct:.0f}% → {best_pct:.0f}%.\n\n'
-                    f'This commonly happens when the PDB model starts at a different\n'
-                    f'residue than the canonical sequence (e.g. signal peptide removed).\n\n'
-                    f'Apply offset {best_offset:+d}?',
-                    ['Yes — apply offset', 'No — continue without offset'],
-                    0, False)
-                if ok and choice.startswith('Yes'):
-                    normalized_values = {pos + best_offset: val
-                                         for pos, val in normalized_values.items()}
-                    ref_aa_by_pos     = {pos + best_offset: aa
-                                         for pos, aa in ref_aa_by_pos.items()}
-                    # Confirm identity after offset; rebuild mismatch_positions for coloring
-                    common_off = set(normalized_values) & set(chain_residue_map)
-                    mismatch_positions = set()
-                    n_mis_off = 0
-                    for pos in common_off:
-                        ref_1l = ref_aa_by_pos.get(pos)
-                        exp    = AA_ONE_TO_THREE.get(ref_1l) if ref_1l else None
-                        if exp and NONSTANDARD_TO_CANONICAL.get(chain_residue_map[pos], chain_residue_map[pos]) != exp:
-                            n_mis_off += 1
-                            mismatch_positions.add(pos)
-                    n_off = len(common_off)
-                    id_off = 100 * (n_off - n_mis_off) / n_off if n_off else 0
-                    validation_log.append(f'Offset {best_offset:+d} applied: {n_off - n_mis_off}/{n_off} '
-                                          f'positions match ({id_off:.0f}%)')
-                    if id_off >= 80:
-                        serious_issue = False
+            if n_checked:
+                identity_pct = 100 * (n_checked - n_mismatched) / n_checked
+                if n_mismatched == 0:
+                    validation_log.append(f'Sequence identity: {n_checked}/{n_checked} positions match chain {chain_id} (100%) ✓')
                 else:
-                    validation_log.append(f'Offset {best_offset:+d} suggested but not applied.')
-            else:
-                validation_log.append('No residue number offset improvement found.')
+                    validation_log.append(f'Sequence identity: {n_checked - n_mismatched}/{n_checked} positions match '
+                                           f'chain {chain_id} ({identity_pct:.0f}%)')
+                    preview = mismatch_details[:10]
+                    suffix  = f'\n  ... and {len(mismatch_details) - 10} more' if len(mismatch_details) > 10 else ''
+                    validation_log.append('\n'.join(preview) + suffix)
+                    if identity_pct < 80:
+                        serious_issue = True
+                        validation_log.append(f'  *** LOW SEQUENCE IDENTITY — more than 20% of positions do not match chain {chain_id}.'
+                                              f' You may have selected the wrong chain or gene. ***')
 
-        # --- Gate coloring on validation result ---
-        if serious_issue:
-            proceed, ok = QInputDialog.getItem(
-                parent, 'Validation Failed — Skip Coloring?',
-                f'Serious issues were found for chain {chain_id} (see log above).\n\n'
-                f'Coverage: {coverage_pct:.0f}%   |   '
-                f'Sequence identity: {identity_pct:.0f}%\n\n'
-                f'Coloring with bad data will produce a misleading result.\n'
-                f'Proceed anyway?',
-                ['No — skip this chain', 'Yes — color anyway (not recommended)'],
-                0, False)
-            if not ok or proceed.startswith('No'):
-                print(f'Skipping coloring for chain {chain_id}.')
-                continue
+            # --- Residue number offset detection ---
+            # Offset dialog runs now (affects coloring); result appended to deferred log.
+            if n_checked == 0 or identity_pct < 90:
+                print('Scanning for residue number offset (e.g. signal peptide, PDB renumbering)...')
+                best_offset, best_matches, n_checkable = find_best_offset(ref_aa_by_pos, chain_residue_map)
+                current_matches = (n_checked - n_mismatched) if n_checked else 0
+                improvement = best_matches - current_matches
 
-        print(f'Coloring chain {chain_id}...')
+                if best_offset != 0 and n_checkable > 0 and improvement > max(5, 0.05 * n_checkable):
+                    best_pct = 100 * best_matches / n_checkable
+                    choice, ok = QInputDialog.getItem(
+                        parent, 'Residue Number Offset Detected',
+                        f'Applying an offset of {best_offset:+d} to score-file positions\n'
+                        f'improves sequence identity from {identity_pct:.0f}% → {best_pct:.0f}%.\n\n'
+                        f'This commonly happens when the PDB model starts at a different\n'
+                        f'residue than the canonical sequence (e.g. signal peptide removed).\n\n'
+                        f'Apply offset {best_offset:+d}?',
+                        ['Yes — apply offset', 'No — continue without offset'],
+                        0, False)
+                    if ok and choice.startswith('Yes'):
+                        normalized_values = {pos + best_offset: val
+                                             for pos, val in normalized_values.items()}
+                        ref_aa_by_pos     = {pos + best_offset: aa
+                                             for pos, aa in ref_aa_by_pos.items()}
+                        # Confirm identity after offset; rebuild mismatch_positions for coloring
+                        common_off = set(normalized_values) & set(chain_residue_map)
+                        mismatch_positions = set()
+                        n_mis_off = 0
+                        for pos in common_off:
+                            ref_1l = ref_aa_by_pos.get(pos)
+                            exp    = AA_ONE_TO_THREE.get(ref_1l) if ref_1l else None
+                            if exp and NONSTANDARD_TO_CANONICAL.get(chain_residue_map[pos], chain_residue_map[pos]) != exp:
+                                n_mis_off += 1
+                                mismatch_positions.add(pos)
+                        n_off = len(common_off)
+                        id_off = 100 * (n_off - n_mis_off) / n_off if n_off else 0
+                        validation_log.append(f'Offset {best_offset:+d} applied: {n_off - n_mis_off}/{n_off} '
+                                              f'positions match ({id_off:.0f}%)')
+                        if id_off >= 80:
+                            serious_issue = False
+                    else:
+                        validation_log.append(f'Offset {best_offset:+d} suggested but not applied.')
+                else:
+                    validation_log.append('No residue number offset improvement found.')
 
-        if not existing_models:
-            run(session, f'show /{chain_id} cartoons')  #Shows cartoon for chain
-            run(session, f'hide /{chain_id} & protein atoms')     #Hides atom representation for protein only
-            run(session, f'hide /{chain_id} & protein bonds')     #Hides bond/stick representation for protein only
-        run(session, f'color /{chain_id} & protein gray target abcs') #Colors protein residues grey first (cartoons, atoms, surface), excludes pseudobonds (e.g. H-bonds)
+            # --- Gate coloring on validation result ---
+            if serious_issue:
+                proceed, ok = QInputDialog.getItem(
+                    parent, 'Validation Failed — Skip Coloring?',
+                    f'Serious issues were found for chain {chain_id} (see log above).\n\n'
+                    f'Coverage: {coverage_pct:.0f}%   |   '
+                    f'Sequence identity: {identity_pct:.0f}%\n\n'
+                    f'Coloring with bad data will produce a misleading result.\n'
+                    f'Proceed anyway?',
+                    ['No — skip this chain', 'Yes — color anyway (not recommended)'],
+                    0, False)
+                if not ok or proceed.startswith('No'):
+                    print(f'Skipping coloring for chain {chain_id}.')
+                    skip_chain = True
 
-        #this block does the coloring; mismatched positions are left gray
-        for residue, value in normalized_values.items():
-            if residue in mismatch_positions:
-                continue
-            if value == 1:
-                hex_color = '#ffffff'
-            else:
-                color = get_color(value) #Gets color from color map
-                hex_color = rgb_to_hex(color[0], color[1], color[2])
-            run(session, f'color /{chain_id}:{residue} {hex_color} target abcs') #Colors cartoons, atoms, and surface
+        if not skip_chain:
+            print(f'Coloring chain {chain_id}...')
 
-        # Print deferred validation summary now that coloring output has finished
-        print(f'--- Validation summary for chain {chain_id} ---')
-        for line in validation_log:
-            print(line)
+            if not existing_models:
+                run(session, f'show /{chain_id} cartoons')  #Shows cartoon for chain
+                run(session, f'hide /{chain_id} & protein atoms')     #Hides atom representation for protein only
+                run(session, f'hide /{chain_id} & protein bonds')     #Hides bond/stick representation for protein only
+            run(session, f'color /{chain_id} & protein gray target abcs') #Colors protein residues grey first (cartoons, atoms, surface), excludes pseudobonds (e.g. H-bonds)
+
+            #this block does the coloring; mismatched positions are left gray
+            for residue, value in normalized_values.items():
+                if residue in mismatch_positions:
+                    continue
+                if value == 1:
+                    hex_color = '#ffffff'
+                else:
+                    color = get_color(value) #Gets color from color map
+                    hex_color = rgb_to_hex(color[0], color[1], color[2])
+                run(session, f'color /{chain_id}:{residue} {hex_color} target abcs') #Colors cartoons, atoms, and surface
+
+            # Print deferred validation summary now that coloring output has finished
+            print(f'--- Validation summary for chain {chain_id} ---')
+            for line in validation_log:
+                print(line)
+
+        again, ok = QInputDialog.getText(
+            parent, 'Add Another?', 'Color another gene/chain? (y/n):')
+        if not ok or again.strip().lower() != 'y':
+            break
 
     run(session, 'lighting flat')
     print('Done!')
