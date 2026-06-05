@@ -76,11 +76,10 @@ Shown per chain during validation:
 
 SURFACE COLORING
 -----------------
-The script colors atoms, cartoon, and surface (target abcs). For surface coloring
-to apply, the surface must already be visible before running the script. To show
-the surface first, run in the ChimeraX command line or select "Show" under
-"Surfaces" in the "Molecule Display" tab:
-    surface
+The script automatically generates a molecular surface for each colored chain
+before applying scores. To hide the surface and show only the ribbon diagram,
+run in the ChimeraX command line or use Molecule Display → Surfaces → Hide:
+    hide /{chain_id} surface
 
 VALIDATION
 ----------
@@ -670,6 +669,7 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
                 run(session, f'show /{chain_id} cartoons')  #Shows cartoon for chain
                 run(session, f'hide /{chain_id} & protein atoms')     #Hides atom representation for protein only
                 run(session, f'hide /{chain_id} & protein bonds')     #Hides bond/stick representation for protein only
+            run(session, f'surface /{chain_id} & protein')  #Show surface so score colors apply to it; user can hide if not wanted
             run(session, f'color /{chain_id} & protein gray target abcs') #Colors protein residues grey first (cartoons, atoms, surface), excludes pseudobonds (e.g. H-bonds)
 
             #this block does the coloring; mismatched positions are left gray

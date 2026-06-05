@@ -308,7 +308,7 @@ For each chain, the script checks coverage (how many scored positions are found 
 | `save_legend` | `True` \| `False` | `False` | Prompt to save legend as PNG |
 | `dna_style` | `'stubs'` \| `'slab'` \| `'fill'` \| `'atoms'` | `'stubs'` | ssDNA display style |
 
-**Surface coloring:** The script targets atoms, cartoon, and surface (`target abcs`). For surface coloring to apply, show the surface **before** running the script (`surface` in the ChimeraX command line, or **Molecule Display → Surfaces → Show**).
+**Surface coloring:** The script automatically generates a molecular surface for each colored chain before applying scores. To hide the surface and see only the ribbon, run `hide /{chain_id} surface` in the ChimeraX command line, or use **Molecule Display → Surfaces → Hide**.
 
 ---
 
