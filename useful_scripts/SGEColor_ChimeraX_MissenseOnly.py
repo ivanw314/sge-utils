@@ -327,7 +327,8 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
         save_path, _ = QFileDialog.getSaveFileName(parent, 'Save Legend', '', 'PNG Files (*.png)')
         if save_path:
             legend.savefig(save_path, dpi=500)
-    plt.close(legend)
+    if not show_legend:
+        plt.close(legend)  # not displayed — discard immediately so it doesn't accumulate
 
     existing_models = session.models.list()
     if not existing_models:
