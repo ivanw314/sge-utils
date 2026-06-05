@@ -44,20 +44,20 @@ INTERACTIVE DIALOGS (shown at runtime)
 Shown once per run:
   1. PDB ID           — prompted only if no structure is currently loaded.
                         If a model is already open, that structure is used as-is.
+
+Repeated per gene/chain (steps 2–7 repeat for each additional chain):
   2. Aggregation      — choose median / mean / min per-residue aggregation.
   3. Score settings   — use defaults or override color range and direction.
                         If Custom is chosen, score column is deferred to step 5
                         so it can be picked from the actual file's columns.
   4. Colorbar legend  — don't show / show / show and save.
-
-Repeated per gene/chain:
   5. SGE score file   — file picker; accepts .xlsx, .tsv, .csv.
      Sheet selection  — shown immediately after for multi-sheet .xlsx files.
      Score column     — shown immediately after (custom mode only): dropdown of
                         all columns in the loaded file.
   6. Chain selection  — dropdown of chains in the loaded structure.
   7. RNA filter       — optional threshold; cancel to skip.
-  8. Add another?     — repeat steps 5–7 for additional chains.
+  8. Add another?     — if yes, loop restarts from step 2.
 
 Shown only when columns are missing:
   - Column Not Found  — picker over all available columns, shown separately
