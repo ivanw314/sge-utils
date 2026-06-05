@@ -398,14 +398,20 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
         # Coverage
         coverage_pct = 100 * len(common) / n_scored if n_scored else 0
         print(f'Coverage: {len(common)}/{n_scored} scored positions found in chain {chain_id} ({coverage_pct:.0f}%)')
+        if common:
+            range_ok, ok = QInputDialog.getItem(
+                parent, 'Check Residue Range',
+                f'Scored positions matched chain {chain_id} residues {min(common)}–{max(common)}.\n'
+                f'Does this range look correct?',
+                ['Yes — continue', 'No — skip this chain'],
+                0, False)
+            if ok and range_ok.startswith('No'):
+                print(f'Skipping coloring for chain {chain_id} — residue range rejected.')
+                continue
         if missing:
             preview = missing[:10]
             suffix  = f' ... and {len(missing) - 10} more' if len(missing) > 10 else ''
-            print(f'  Warning: {len(missing)} scored position(s) not in chain {chain_id}: {preview}{suffix}')
-        if coverage_pct < 50:
-            serious_issue = True
-            print(f'  *** LOW COVERAGE — fewer than half the scored positions exist in chain {chain_id}.'
-                  f' You may have selected the wrong chain. ***')
+            print(f'  Note: {len(missing)} scored position(s) not found in chain {chain_id}: {preview}{suffix}')
 
         # Amino-acid identity
         n_checked = n_mismatched = 0
@@ -478,11 +484,10 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
                             mismatch_positions.add(pos)
                     n_off = len(common_off)
                     id_off = 100 * (n_off - n_mis_off) / n_off if n_off else 0
-                    cov_off = 100 * n_off / n_scored if n_scored else 0
                     print(f'  After offset {best_offset:+d}: {n_off - n_mis_off}/{n_off} '
                           f'positions match ({id_off:.0f}%)')
-                    # Clear serious_issue if both coverage and identity are now acceptable
-                    if id_off >= 80 and cov_off >= 50:
+                    # Clear serious_issue if identity is now acceptable
+                    if id_off >= 80:
                         serious_issue = False
             else:
                 print('  No offset improvement found.')
