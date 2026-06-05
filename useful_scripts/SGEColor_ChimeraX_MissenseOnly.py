@@ -34,25 +34,57 @@ Optional columns:
 
 INTERACTIVE DIALOGS (shown at runtime)
 ---------------------------------------
-1. PDB ID          — prompted only if no structure is currently loaded.
-                     If a model is already open, that structure is used as-is.
-2. Score settings  — choose aggregation method (median / mean / min), then
-                     optionally override score column, color range, and direction.
-3. Legend          — choose whether to show and/or save the colorbar legend.
-4. SGE score file  — file picker for the score table (see INPUT FILE FORMAT above).
-5. Chain selection — dropdown populated from the chains in the loaded structure.
-6. RNA filter      — (optional) enter a numeric threshold to exclude variants
-                     where RNA_score is below that value. Cancel to skip.
-7. Add another?    — repeat steps 4–6 to color additional chains in one run.
+Shown once per run:
+  1. PDB ID           — prompted only if no structure is currently loaded.
+                        If a model is already open, that structure is used as-is.
+  2. Aggregation      — choose median / mean / min per-residue aggregation.
+  3. Score settings   — use defaults or override: score column, color range,
+                        color direction (white=high or red=high).
+  4. Colorbar legend  — don't show / show / show and save.
+
+Repeated per gene/chain:
+  5. SGE score file   — file picker; accepts .xlsx, .tsv, .csv.
+  6. Chain selection  — dropdown of chains in the loaded structure.
+  7. RNA filter       — optional threshold; cancel to skip.
+  8. Add another?     — repeat steps 5–7 for additional chains.
+
+Shown only when columns are missing:
+  - Column Not Found  — picker over all available columns, shown separately
+                        for consequence, amino_acid_change, and score_column.
+  - Missense label    — picker over unique consequence values if no
+                        'missense_variant' rows are found after column mapping.
+  - RNA column        — same picker if RNA_score is not found and a threshold
+                        was requested.
+
+Shown per chain during validation:
+  9. Residue range    — confirm matched residue range before coloring proceeds.
+  10. Offset detected — apply a detected residue number offset (e.g. signal
+                        peptide removed), if one is found. Conditional.
+  11. Validation gate — skip or proceed if sequence identity is below 80%.
+                        Conditional; default is skip.
 
 SURFACE COLORING
 -----------------
 The script colors atoms, cartoon, and surface (target abcs). For surface coloring
 to apply, the surface must already be visible before running the script. To show
-the surface first, run in the ChimeraX command line or select "Show" under "Surfaces" in the "Molecule Display" tab:
+the surface first, run in the ChimeraX command line or select "Show" under
+"Surfaces" in the "Molecule Display" tab:
     surface
 
-CONFIGURATION (edit at top of script)
+VALIDATION
+----------
+For each chain, the script checks:
+  - Coverage: how many scored positions are found in the chain, and the
+    matched residue range (shown as a confirmation dialog).
+  - Sequence identity: whether the reference amino acid in the score file
+    matches the structure at each position. Mismatched positions are left
+    gray even if the user proceeds. If identity is below 90%, an automatic
+    scan for a residue number offset is run.
+  - Coloring is blocked (with an override option) if identity is below 80%
+    and no offset corrects it.
+A validation summary is printed to the log after coloring completes.
+
+CONFIGURATION (edit at top of script — all can also be set via the GUI)
 ---------------------------------------
   analysis_type  'med' | 'mean' | 'min'   Aggregation method per residue (default: 'med')
   score_column   str                       Column name in the score file to use (default: 'score')
