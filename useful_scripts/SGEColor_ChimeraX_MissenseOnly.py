@@ -10,20 +10,40 @@ USAGE
 In the ChimeraX command line:
     runscript /path/to/SGEColor_ChimeraX_MissenseOnly.py
 
+INPUT FILE FORMAT
+------------------
+Supported file types: .xlsx (sheet must be named 'scores'), .tsv, .csv
+
+Required columns:
+  consequence        str    Only rows containing 'missense_variant' are kept.
+  amino_acid_change  str    One-letter ref AA + integer position + one-letter alt AA.
+                            Examples: 'A123G' (Ala→Gly at position 123),
+                                      'R45W'  (Arg→Trp at position 45).
+                            The ref AA (first character) is used to verify the
+                            sequence matches the selected PDB chain.
+  <score_column>     float  Numeric score used for coloring. Column name is set by
+                            the score_column config variable (default: 'score').
+
+Optional quality-control columns:
+  variant_qc_flag    str    If present, rows where this equals 'WARN' are excluded.
+
+Optional columns:
+  RNA_score / RNAscore  float  If an RNA score threshold is specified at runtime,
+                               variants below the threshold are excluded.
+                               Rows with a missing RNA score are kept regardless.
+
 INTERACTIVE DIALOGS (shown at runtime)
 ---------------------------------------
 1. PDB ID          — prompted only if no structure is currently loaded.
                      If a model is already open, that structure is used as-is.
-2. SGE score file  — file picker for an Excel (.xlsx) SGE score table.
-                     Supported formats: .xlsx (must contain a sheet named 'scores'),
-                     .tsv (tab-separated), .csv (comma-separated).
-                     Required columns: variant_qc_flag, consequence,
-                       amino_acid_change, <score_column>
-                     RNA_score (optional column) used by RNA filter below
-3. Chain selection — dropdown populated from the chains in the loaded structure.
-4. RNA filter      — (optional) enter a numeric threshold to exclude variants
+2. Score settings  — choose aggregation method (median / mean / min), then
+                     optionally override score column, color range, and direction.
+3. Legend          — choose whether to show and/or save the colorbar legend.
+4. SGE score file  — file picker for the score table (see INPUT FILE FORMAT above).
+5. Chain selection — dropdown populated from the chains in the loaded structure.
+6. RNA filter      — (optional) enter a numeric threshold to exclude variants
                      where RNA_score is below that value. Cancel to skip.
-5. Add another?    — repeat steps 2–4 to color additional chains in one run.
+7. Add another?    — repeat steps 4–6 to color additional chains in one run.
 
 SURFACE COLORING
 -----------------
@@ -86,7 +106,8 @@ def read_scores(file, rna_score_threshold=None): #Reads score file
     else:
         raise ValueError(f'Unsupported file type: {ext}. Use .xlsx, .tsv, or .csv')
 
-    df = df.loc[df['variant_qc_flag'] != 'WARN'] #Filters out variants with WARN flag
+    if 'variant_qc_flag' in df.columns:
+        df = df.loc[df['variant_qc_flag'] != 'WARN'] #Filters out variants with WARN flag
     if score_column not in df.columns:
         raise ValueError(f"score_column '{score_column}' not found. Available columns: {df.columns.tolist()}")
     df = df.rename(columns={'consequence': 'Consequence', 'amino_acid_change': 'AAsub', score_column: 'snv_score'})
@@ -153,6 +174,7 @@ cmap_name = 'gray_to_red'
 custom_cmap = LinearSegmentedColormap.from_list(cmap_name, colors, N=n_bins) #makes the color map
 
 def create_colorbar_legend():
+    plt.close('all')  # clear any figures left over from previous runs
     fig, ax = plt.subplots(figsize=(1, 0.5))
     fig.subplots_adjust(bottom=0.5)
 
@@ -199,8 +221,8 @@ def find_best_offset(ref_aa_by_pos, chain_residue_map, max_offset=500):
 
 
 def get_score_config(session):
-    """Ask aggregation method (always), then optionally override score_column / clamp range / color direction."""
-    global analysis_type, score_column, clamp_min, clamp_max, high_is_red
+    """Ask aggregation method and legend preference (always); optionally override score_column / clamp range / color direction."""
+    global analysis_type, score_column, clamp_min, clamp_max, high_is_red, show_legend, save_legend
     parent = session.ui.main_window
 
     # Aggregation method — always asked
@@ -218,42 +240,51 @@ def get_score_config(session):
         [f'Default  (column: "{score_column}",  range: {clamp_min} to {clamp_max},  white = high score)',
          'Custom score column / range / color direction'],
         0, False)
-    if not ok or mode.startswith('Default'):
-        return  # keep hardcoded defaults for remaining settings
+    if ok and mode.startswith('Custom'):
+        # Score column
+        col, ok = QInputDialog.getText(
+            parent, 'Score Column',
+            'Score column name in the input file:',
+            text=score_column)
+        if ok and col.strip():
+            score_column = col.strip()
 
-    # Score column
-    col, ok = QInputDialog.getText(
-        parent, 'Score Column',
-        'Score column name in the input file:',
-        text=score_column)
-    if ok and col.strip():
-        score_column = col.strip()
+        # Clamp range — min
+        cmin, ok = QInputDialog.getDouble(
+            parent, 'Color Range — Minimum',
+            'Lower bound for color normalization\n(values below this are clamped to this color):',
+            clamp_min, -1e6, 1e6, 4)
+        if ok:
+            clamp_min = cmin
 
-    # Clamp range — min
-    cmin, ok = QInputDialog.getDouble(
-        parent, 'Color Range — Minimum',
-        'Lower bound for color normalization\n(values below this are clamped to this color):',
-        clamp_min, -1e6, 1e6, 4)
+        # Clamp range — max
+        cmax, ok = QInputDialog.getDouble(
+            parent, 'Color Range — Maximum',
+            'Upper bound for color normalization\n(values above this are clamped to this color):',
+            clamp_max, -1e6, 1e6, 4)
+        if ok:
+            clamp_max = cmax
+
+        # Color direction
+        direction, ok = QInputDialog.getItem(
+            parent, 'Color Direction',
+            'Which end of the score range should be red?',
+            ['White = high score  /  Red = low score',
+             'Red = high score  /  White = low score'],
+            0, False)
+        if ok:
+            high_is_red = direction.startswith('Red')
+
+    # Legend — always asked
+    default_legend_idx = 2 if save_legend else (1 if show_legend else 0)
+    legend_choice, ok = QInputDialog.getItem(
+        parent, 'Colorbar Legend',
+        'Show a colorbar legend for the score range?',
+        ["Don't show legend", 'Show legend', 'Show and save legend'],
+        default_legend_idx, False)
     if ok:
-        clamp_min = cmin
-
-    # Clamp range — max
-    cmax, ok = QInputDialog.getDouble(
-        parent, 'Color Range — Maximum',
-        'Upper bound for color normalization\n(values above this are clamped to this color):',
-        clamp_max, -1e6, 1e6, 4)
-    if ok:
-        clamp_max = cmax
-
-    # Color direction
-    direction, ok = QInputDialog.getItem(
-        parent, 'Color Direction',
-        'Which end of the score range should be red?',
-        ['White = high score  /  Red = low score',
-         'Red = high score  /  White = low score'],
-        0, False)
-    if ok:
-        high_is_red = direction.startswith('Red')
+        show_legend = legend_choice != "Don't show legend"
+        save_legend = legend_choice == 'Show and save legend'
 
 
 def get_gene_configs(session, available_chains):
@@ -296,6 +327,7 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
         save_path, _ = QFileDialog.getSaveFileName(parent, 'Save Legend', '', 'PNG Files (*.png)')
         if save_path:
             legend.savefig(save_path, dpi=500)
+    plt.close(legend)
 
     existing_models = session.models.list()
     if not existing_models:
