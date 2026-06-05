@@ -102,6 +102,7 @@ from chimerax.core.commands import run
 import subprocess
 import sys
 import os
+import re
 from Qt.QtWidgets import QInputDialog, QFileDialog
 
 #Install required packages into ChimeraX's Python environment if not already present
@@ -147,7 +148,19 @@ def read_scores(file, parent, rna_score_threshold=None): #Reads score file
     global score_column
     ext = os.path.splitext(file)[1].lower()
     if ext == '.xlsx':
-        df = pd.read_excel(file, sheet_name='scores')
+        xl = pd.ExcelFile(file)
+        sheets = xl.sheet_names
+        if len(sheets) == 1:
+            sheet = sheets[0]
+        else:
+            default_idx = sheets.index('scores') if 'scores' in sheets else 0
+            sheet, ok = QInputDialog.getItem(
+                parent, 'Select Sheet',
+                f'"{os.path.basename(file)}" has multiple sheets.\nSelect the one containing SGE scores:',
+                sheets, default_idx, False)
+            if not ok:
+                raise ValueError('Sheet selection cancelled — aborting.')
+        df = pd.read_excel(xl, sheet_name=sheet)
     elif ext == '.tsv':
         df = pd.read_csv(file, sep='\t')
     elif ext == '.csv':
@@ -159,7 +172,8 @@ def read_scores(file, parent, rna_score_threshold=None): #Reads score file
         df = df.loc[df['variant_qc_flag'] != 'WARN'] #Filters out variants with WARN flag
 
     consequence_col = resolve_column(df, 'consequence',       'identifies missense variants', parent)
-    aa_change_col   = resolve_column(df, 'amino_acid_change', 'format: one-letter ref AA + position + alt AA, e.g. A123G', parent)
+    aa_change_col   = resolve_column(df, 'amino_acid_change',
+                                     'amino acid substitution — accepts A123G, p.Met123Val, NP_xxx:p.Met123Lys, etc.', parent)
     score_col       = resolve_column(df, score_column,        'numeric score used for coloring', parent)
     if score_col != score_column:
         score_column = score_col  # keep legend label in sync
@@ -187,7 +201,14 @@ def read_scores(file, parent, rna_score_threshold=None): #Reads score file
             rna_col = resolve_column(df, 'RNA_score', 'RNA score used for optional filtering', parent)
         df = df.loc[df[rna_col].isna() | (df[rna_col] >= rna_score_threshold)]
 
-    df['AApos'] = df['AAsub'].transform(lambda x: int(x[1:-1])) #Creates new amino acid position column
+    parsed = df['AAsub'].map(parse_aa_change)
+    n_unparseable = parsed.isna().sum()
+    if n_unparseable:
+        print(f'  Warning: {n_unparseable} row(s) with unparseable amino_acid_change values dropped.')
+    df = df[parsed.notna()].copy()
+    parsed = parsed[parsed.notna()]
+    df['AApos']       = parsed.map(lambda x: x[1])
+    df['ref_1letter'] = parsed.map(lambda x: x[0])
 
     return df
 
@@ -227,6 +248,60 @@ AA_ONE_TO_THREE = {
     'M': 'MET', 'N': 'ASN', 'P': 'PRO', 'Q': 'GLN', 'R': 'ARG',
     'S': 'SER', 'T': 'THR', 'V': 'VAL', 'W': 'TRP', 'Y': 'TYR',
 }
+
+THREE_TO_ONE = {v: k for k, v in AA_ONE_TO_THREE.items()}
+
+# Maps non-standard residue three-letter codes (as returned by ChimeraX r.name) to their
+# canonical parent amino acid, so crystallographic modifications don't cause false mismatches.
+NONSTANDARD_TO_CANONICAL = {
+    'MSE': 'MET',  # selenomethionine — very common in X-ray structures
+    'HYP': 'PRO',  # 4-hydroxyproline
+    'SEP': 'SER',  # phosphoserine
+    'TPO': 'THR',  # phosphothreonine
+    'PTR': 'TYR',  # phosphotyrosine
+    'CSO': 'CYS',  # S-hydroxycysteine
+    'CSS': 'CYS',  # S-mercaptocysteine
+    'CME': 'CYS',  # carboxymethyl cysteine
+    'OCS': 'CYS',  # cysteic acid
+    'MLY': 'LYS',  # N6-methyl-lysine
+    'M3L': 'LYS',  # N6-trimethyl-lysine
+    'ALY': 'LYS',  # N6-acetyl-lysine
+    'KCX': 'LYS',  # N6-carboxylysine
+    'HIC': 'HIS',  # 4-methyl-histidine
+    'TYS': 'TYR',  # O-sulfo-tyrosine
+    'NEP': 'HIS',  # N1-phosphohistidine
+    'MHO': 'MET',  # S-oxymethionine
+}
+
+# Matches the following amino acid change formats (all produce ref_1letter + position):
+#   A123G                     — one-letter shorthand
+#   p.A123G                   — HGVS one-letter
+#   p.Met123Val / p.Met123V   — HGVS three-letter ref (mixed alt ok)
+#   NP_009225.1:p.Met123Lys   — accession-prefixed HGVS
+_AA_SUB_RE = re.compile(
+    r'^(?:[^:]+:)?'           # optional accession prefix (e.g. NP_009225.1:)
+    r'(?:p\.)?'               # optional p. prefix
+    r'([A-Za-z]{1,3})'        # ref AA (1 or 3 letters)
+    r'(\d+)'                  # residue position
+    r'([A-Za-z*=]{1,3})$'     # alt AA, stop (*), or synonymous (=)
+)
+
+def parse_aa_change(s):
+    """Return (ref_1letter, pos_int) parsed from an amino acid change string, or None if unparseable."""
+    if not isinstance(s, str):
+        return None
+    m = _AA_SUB_RE.match(s.strip())
+    if not m:
+        return None
+    ref_raw, pos_str = m.group(1), m.group(2)
+    if len(ref_raw) == 1:
+        ref_1 = ref_raw.upper()
+    else:
+        ref_1 = THREE_TO_ONE.get(ref_raw.upper())
+    if ref_1 not in AA_ONE_TO_THREE:
+        return None
+    return ref_1, int(pos_str)
+
 
 colors = [(1.0, 1.0, 1.0), (1, 0, 0)]  # White -> Red
 n_bins = 1000  # Number of bins for the colormap
@@ -274,7 +349,9 @@ def find_best_offset(ref_aa_by_pos, chain_residue_map, max_offset=500):
     best_offset, best_matches = 0, 0
     for offset in range(-max_offset, max_offset + 1):
         matches = sum(1 for pos, exp in scored
-                      if chain_residue_map.get(pos + offset) == exp)
+                      if NONSTANDARD_TO_CANONICAL.get(
+                          chain_residue_map.get(pos + offset, ''),
+                          chain_residue_map.get(pos + offset, '')) == exp)
         if matches > best_matches:
             best_matches, best_offset = matches, offset
     return best_offset, best_matches, len(scored)
@@ -422,7 +499,7 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
         label = os.path.basename(file_path)
         print(f'Reading SGE scores from {label}...')
         raw_scores = read_scores(file_path, parent, rna_score_threshold)
-        ref_aa_by_pos = raw_scores.drop_duplicates('AApos').set_index('AApos')['AAsub'].apply(lambda x: x[0]).to_dict()
+        ref_aa_by_pos = raw_scores.drop_duplicates('AApos').set_index('AApos')['ref_1letter'].to_dict()
 
         print('Grouping scores by residue...')
         min_scores, mean_scores, median_scores = group_scores(raw_scores) #Gets min/mean/median score dataframes
@@ -490,7 +567,8 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
             actual = chain_residue_map[pos]
             if expected:
                 n_checked += 1
-                if actual != expected:
+                actual_canonical = NONSTANDARD_TO_CANONICAL.get(actual, actual)
+                if actual_canonical != expected:
                     n_mismatched += 1
                     mismatch_positions.add(pos)
                     mismatch_details.append(
@@ -542,7 +620,7 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
                     for pos in common_off:
                         ref_1l = ref_aa_by_pos.get(pos)
                         exp    = AA_ONE_TO_THREE.get(ref_1l) if ref_1l else None
-                        if exp and chain_residue_map[pos] != exp:
+                        if exp and NONSTANDARD_TO_CANONICAL.get(chain_residue_map[pos], chain_residue_map[pos]) != exp:
                             n_mis_off += 1
                             mismatch_positions.add(pos)
                     n_off = len(common_off)
