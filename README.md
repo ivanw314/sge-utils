@@ -246,7 +246,7 @@ Standalone scripts for common SGE data processing and structure visualization ta
 
 ### SGEColor_ChimeraX_MissenseOnly.py
 
-Colors a protein ribbon structure in [ChimeraX](https://www.cgl.ucsf.edu/chimerax/) by per-residue SGE scores using only missense variants. Scores are aggregated per amino acid position and mapped onto a white → red color scale clamped to [−0.2, 0].
+Colors a protein ribbon structure in [ChimeraX](https://www.cgl.ucsf.edu/chimerax/) by per-residue SGE scores using only missense variants. Scores are aggregated per amino acid position and mapped onto a configurable white ↔ red color scale. The script is fully dialog-driven — no command-line arguments needed.
 
 > **Requirement:** [UCSF ChimeraX](https://www.cgl.ucsf.edu/chimerax/) must be installed separately — it is not part of the conda environment. Required Python packages (`pandas`, `openpyxl`, `matplotlib`) are installed automatically into ChimeraX's Python environment on first run.
 
@@ -257,34 +257,58 @@ In the ChimeraX command line:
 runscript /path/to/SGEColor_ChimeraX_MissenseOnly.py
 ```
 
-The script guides the user through a series of dialogs at runtime:
+**Dialog sequence:**
 
 | Step | Dialog | Notes |
 |---|---|---|
-| 1 | PDB ID | Skipped if a structure is already loaded |
-| 2 | SGE score file | File picker; accepts `.xlsx`, `.tsv`, or `.csv` |
-| 3 | Chain selection | Dropdown populated from chains in the loaded structure |
-| 4 | RNA score filter | Optional — exclude variants below a given `RNA_score` threshold |
-| 5 | Add another? | Repeat steps 2–4 to color multiple chains in one run |
+| 1 | PDB ID | Skipped if a structure is already open |
+| 2–8 | *(per chain — repeats from step 2 for each additional chain)* | |
+| 2 | Aggregation method | Median / mean / min per-residue aggregation |
+| 3 | Score settings | Default or custom: color range, color direction (score column deferred to file-load in custom mode) |
+| 4 | Colorbar legend | Don't show / show / show and save |
+| 5 | SGE score file | File picker; accepts `.xlsx`, `.tsv`, `.csv` |
+| — | Sheet selection | Shown for multi-sheet `.xlsx` files; `scores` pre-selected if present |
+| — | Score column | Shown in custom mode after file/sheet load; dropdown of all columns in the file |
+| 6 | Chain selection | Dropdown of chains in the loaded structure |
+| 7 | RNA score filter | Optional — cancel to skip |
+| 8 | Add another? | If yes, loop restarts from step 2 |
+| — | Column remapping | Appears per file if expected column names are not found |
+| — | Residue range check | Confirm matched range before coloring proceeds |
+| — | Offset detection | Shown if sequence identity < 90% and a better offset exists |
+| — | Validation gate | Skip or force-proceed if identity < 80% after offset check |
 
 **Score file format:**
 
-Required columns: `variant_qc_flag`, `consequence`, `amino_acid_change`, `score`
+Accepted file types: `.xlsx`, `.tsv`, `.csv`. For `.xlsx` files with multiple sheets a picker dialog appears; the sheet named `scores` is pre-selected if present.
 
-Optional column: `RNA_score` (used by the RNA score filter)
+| Column | Required | Description |
+|---|---|---|
+| `consequence` | Yes | Rows containing `'missense_variant'` are kept; other rows ignored |
+| `amino_acid_change` | Yes | Amino acid substitution — accepts `A123G`, `p.Met123Val`, `NP_xxx:p.Met123Lys`, and other standard HGVS forms |
+| `score` | Yes (default name) | Numeric score used for coloring; name is configurable |
+| `variant_qc_flag` | No | Rows where this equals `'WARN'` are excluded if the column exists |
+| `RNA_score` / `RNAscore` | No | Used by the optional RNA score filter |
 
-For `.xlsx` files, scores must be on a sheet named `scores`.
+If any required column name differs in your dataset, a picker dialog appears automatically showing all available columns so you can select the correct one.
 
-**Configuration** (edit at top of script):
+**Validation:**
+
+For each chain, the script checks coverage (how many scored positions are found in the structure) and sequence identity (whether the reference amino acid in the score file matches the PDB residue at each position). A residue range confirmation dialog is shown before coloring. If identity is imperfect, an automatic scan for a residue number offset is run (common when the PDB starts at a different residue than the canonical sequence, e.g. after signal peptide removal). Non-standard residues in the structure (e.g. MSE, SEP, TPO, HYP) are mapped to their canonical parent amino acid before comparison so they do not inflate the mismatch count. Positions with amino acid mismatches are always left gray. Coloring is blocked by default if identity is below 80% and no offset corrects it. A validation summary is printed to the log after coloring finishes.
+
+**Configuration** (edit at top of script; all settings are also available via the GUI):
 
 | Parameter | Options | Default | Description |
 |---|---|---|---|
 | `analysis_type` | `'med'` \| `'mean'` \| `'min'` | `'med'` | Score aggregation method per residue |
+| `score_column` | str | `'score'` | Column name in the score file to use |
+| `clamp_min` | float | `-0.2` | Lower bound of the color normalization range |
+| `clamp_max` | float | `0.0` | Upper bound of the color normalization range |
+| `high_is_red` | `True` \| `False` | `False` | If `False`, white = high score, red = low; if `True`, reversed |
 | `show_legend` | `True` \| `False` | `False` | Show colorbar legend window |
 | `save_legend` | `True` \| `False` | `False` | Prompt to save legend as PNG |
 | `dna_style` | `'stubs'` \| `'slab'` \| `'fill'` \| `'atoms'` | `'stubs'` | ssDNA display style |
 
-**Surface coloring:** The script targets atoms, cartoon, and surface (`target abcs`). For surface coloring to apply, show the surface **before** running the script (`surface` in the ChimeraX command line, or **Molecule Display → Surfaces → Show**).
+**Surface coloring:** The script automatically generates a molecular surface for each colored chain before applying scores. To hide the surface and see only the ribbon, run `hide /{chain_id} surface` in the ChimeraX command line, or use **Molecule Display → Surfaces → Hide**.
 
 ---
 
