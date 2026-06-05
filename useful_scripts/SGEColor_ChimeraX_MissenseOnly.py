@@ -391,14 +391,17 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
                 break
 
         # --- Validation ---
+        # Informational messages are collected and printed after coloring so they
+        # aren't buried under ChimeraX command output.
+        validation_log = []
         serious_issue = False
         n_scored  = len(normalized_values)
         common    = set(normalized_values) & set(chain_residue_map)
         missing   = sorted(set(normalized_values) - set(chain_residue_map))
 
-        # Coverage
+        # Coverage — range dialog runs now (can abort); stats deferred to log
         coverage_pct = 100 * len(common) / n_scored if n_scored else 0
-        print(f'Coverage: {len(common)}/{n_scored} scored positions found in chain {chain_id} ({coverage_pct:.0f}%)')
+        validation_log.append(f'Coverage: {len(common)}/{n_scored} scored positions found in chain {chain_id} ({coverage_pct:.0f}%)')
         if common:
             range_ok, ok = QInputDialog.getItem(
                 parent, 'Check Residue Range',
@@ -412,7 +415,7 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
         if missing:
             preview = missing[:10]
             suffix  = f' ... and {len(missing) - 10} more' if len(missing) > 10 else ''
-            print(f'  Note: {len(missing)} scored position(s) not found in chain {chain_id}: {preview}{suffix}')
+            validation_log.append(f'  Note: {len(missing)} scored position(s) not found in chain {chain_id}: {preview}{suffix}')
 
         # Amino-acid identity
         n_checked = n_mismatched = 0
@@ -434,21 +437,20 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
         if n_checked:
             identity_pct = 100 * (n_checked - n_mismatched) / n_checked
             if n_mismatched == 0:
-                print(f'Sequence identity: {n_checked}/{n_checked} positions match chain {chain_id} (100%) ✓')
+                validation_log.append(f'Sequence identity: {n_checked}/{n_checked} positions match chain {chain_id} (100%) ✓')
             else:
-                print(f'Sequence identity: {n_checked - n_mismatched}/{n_checked} positions match '
-                      f'chain {chain_id} ({identity_pct:.0f}%)')
+                validation_log.append(f'Sequence identity: {n_checked - n_mismatched}/{n_checked} positions match '
+                                       f'chain {chain_id} ({identity_pct:.0f}%)')
                 preview = mismatch_details[:10]
                 suffix  = f'\n  ... and {len(mismatch_details) - 10} more' if len(mismatch_details) > 10 else ''
-                print('\n'.join(preview) + suffix)
+                validation_log.append('\n'.join(preview) + suffix)
                 if identity_pct < 80:
                     serious_issue = True
-                    print(f'  *** LOW SEQUENCE IDENTITY — more than 20% of positions do not match chain {chain_id}.'
-                          f' You may have selected the wrong chain or gene. ***')
+                    validation_log.append(f'  *** LOW SEQUENCE IDENTITY — more than 20% of positions do not match chain {chain_id}.'
+                                          f' You may have selected the wrong chain or gene. ***')
 
         # --- Residue number offset detection ---
-        # Trigger whenever identity is imperfect; also catches the case where coverage is low
-        # because positions simply don't exist at offset 0.
+        # Offset dialog runs now (affects coloring); result appended to deferred log.
         if n_checked == 0 or identity_pct < 90:
             print('Scanning for residue number offset (e.g. signal peptide, PDB renumbering)...')
             best_offset, best_matches, n_checkable = find_best_offset(ref_aa_by_pos, chain_residue_map)
@@ -457,8 +459,6 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
 
             if best_offset != 0 and n_checkable > 0 and improvement > max(5, 0.05 * n_checkable):
                 best_pct = 100 * best_matches / n_checkable
-                print(f'  Possible offset detected: {best_offset:+d} '
-                      f'(identity {identity_pct:.0f}% → {best_pct:.0f}%)')
                 choice, ok = QInputDialog.getItem(
                     parent, 'Residue Number Offset Detected',
                     f'Applying an offset of {best_offset:+d} to score-file positions\n'
@@ -485,13 +485,14 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
                             mismatch_positions.add(pos)
                     n_off = len(common_off)
                     id_off = 100 * (n_off - n_mis_off) / n_off if n_off else 0
-                    print(f'  After offset {best_offset:+d}: {n_off - n_mis_off}/{n_off} '
-                          f'positions match ({id_off:.0f}%)')
-                    # Clear serious_issue if identity is now acceptable
+                    validation_log.append(f'Offset {best_offset:+d} applied: {n_off - n_mis_off}/{n_off} '
+                                          f'positions match ({id_off:.0f}%)')
                     if id_off >= 80:
                         serious_issue = False
+                else:
+                    validation_log.append(f'Offset {best_offset:+d} suggested but not applied.')
             else:
-                print('  No offset improvement found.')
+                validation_log.append('No residue number offset improvement found.')
 
         # --- Gate coloring on validation result ---
         if serious_issue:
@@ -508,8 +509,7 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
                 print(f'Skipping coloring for chain {chain_id}.')
                 continue
 
-        print('Applying colors in ChimeraX...')
-        print(f'Coloring chain {chain_id} based on {analysis_type} SGE scores...')
+        print(f'Coloring chain {chain_id}...')
 
         if not existing_models:
             run(session, f'show /{chain_id} cartoons')  #Shows cartoon for chain
@@ -527,6 +527,11 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
                 color = get_color(value) #Gets color from color map
                 hex_color = rgb_to_hex(color[0], color[1], color[2])
             run(session, f'color /{chain_id}:{residue} {hex_color} target abcs') #Colors cartoons, atoms, and surface
+
+        # Print deferred validation summary now that coloring output has finished
+        print(f'--- Validation summary for chain {chain_id} ---')
+        for line in validation_log:
+            print(line)
 
     run(session, 'lighting flat')
     print('Done!')
