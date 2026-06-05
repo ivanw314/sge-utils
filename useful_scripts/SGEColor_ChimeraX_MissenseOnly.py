@@ -182,6 +182,22 @@ def rgb_to_hex(r, g, b): #Converts float RGB (0-1) to hex string for ChimeraX
     return '#{:02x}{:02x}{:02x}'.format(int(r * 255), int(g * 255), int(b * 255))
 
 
+def find_best_offset(ref_aa_by_pos, chain_residue_map, max_offset=500):
+    """Scan integer offsets [-max_offset, +max_offset] to find the shift that maximises
+    AA identity between score-file positions and the chain. Returns (offset, n_matches, n_checkable)."""
+    scored = [(pos, AA_ONE_TO_THREE[aa]) for pos, aa in ref_aa_by_pos.items()
+              if aa in AA_ONE_TO_THREE]
+    if not scored:
+        return 0, 0, 0
+    best_offset, best_matches = 0, 0
+    for offset in range(-max_offset, max_offset + 1):
+        matches = sum(1 for pos, exp in scored
+                      if chain_residue_map.get(pos + offset) == exp)
+        if matches > best_matches:
+            best_matches, best_offset = matches, offset
+    return best_offset, best_matches, len(scored)
+
+
 def get_score_config(session):
     """Ask aggregation method (always), then optionally override score_column / clamp range / color direction."""
     global analysis_type, score_column, clamp_min, clamp_max, high_is_red
@@ -341,23 +357,114 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
             if chain_residue_map:
                 break
 
-        # Warn about scored positions absent from the structure
-        missing = sorted(set(normalized_values) - set(chain_residue_map))
-        if missing:
-            print(f'Warning: {len(missing)} scored position(s) not found in chain {chain_id}: {missing}')
+        # --- Validation ---
+        serious_issue = False
+        n_scored  = len(normalized_values)
+        common    = set(normalized_values) & set(chain_residue_map)
+        missing   = sorted(set(normalized_values) - set(chain_residue_map))
 
-        # Warn about positions where the reference amino acid doesn't match the structure
-        mismatches = []
-        for pos in sorted(set(normalized_values) & set(chain_residue_map)):
+        # Coverage
+        coverage_pct = 100 * len(common) / n_scored if n_scored else 0
+        print(f'Coverage: {len(common)}/{n_scored} scored positions found in chain {chain_id} ({coverage_pct:.0f}%)')
+        if missing:
+            preview = missing[:10]
+            suffix  = f' ... and {len(missing) - 10} more' if len(missing) > 10 else ''
+            print(f'  Warning: {len(missing)} scored position(s) not in chain {chain_id}: {preview}{suffix}')
+        if coverage_pct < 50:
+            serious_issue = True
+            print(f'  *** LOW COVERAGE — fewer than half the scored positions exist in chain {chain_id}.'
+                  f' You may have selected the wrong chain. ***')
+
+        # Amino-acid identity
+        n_checked = n_mismatched = 0
+        identity_pct = 0.0
+        mismatch_details = []
+        for pos in sorted(common):
             ref_1letter = ref_aa_by_pos.get(pos)
             expected = AA_ONE_TO_THREE.get(ref_1letter) if ref_1letter else None
             actual = chain_residue_map[pos]
-            if expected and actual != expected:
-                mismatches.append(f'  pos {pos}: score file says {ref_1letter} ({expected}), structure has {actual}')
-        if mismatches:
-            print(f'Warning: {len(mismatches)} amino acid mismatch(es) in chain {chain_id}:')
-            for msg in mismatches:
-                print(msg)
+            if expected:
+                n_checked += 1
+                if actual != expected:
+                    n_mismatched += 1
+                    mismatch_details.append(
+                        f'  pos {pos}: score file expects {ref_1letter} ({expected}), chain has {actual}')
+
+        if n_checked:
+            identity_pct = 100 * (n_checked - n_mismatched) / n_checked
+            if n_mismatched == 0:
+                print(f'Sequence identity: {n_checked}/{n_checked} positions match chain {chain_id} (100%) ✓')
+            else:
+                print(f'Sequence identity: {n_checked - n_mismatched}/{n_checked} positions match '
+                      f'chain {chain_id} ({identity_pct:.0f}%)')
+                preview = mismatch_details[:10]
+                suffix  = f'\n  ... and {len(mismatch_details) - 10} more' if len(mismatch_details) > 10 else ''
+                print('\n'.join(preview) + suffix)
+                if identity_pct < 80:
+                    serious_issue = True
+                    print(f'  *** LOW SEQUENCE IDENTITY — more than 20% of positions do not match chain {chain_id}.'
+                          f' You may have selected the wrong chain or gene. ***')
+
+        # --- Residue number offset detection ---
+        # Trigger whenever identity is imperfect; also catches the case where coverage is low
+        # because positions simply don't exist at offset 0.
+        if n_checked == 0 or identity_pct < 90:
+            print('Scanning for residue number offset (e.g. signal peptide, PDB renumbering)...')
+            best_offset, best_matches, n_checkable = find_best_offset(ref_aa_by_pos, chain_residue_map)
+            current_matches = (n_checked - n_mismatched) if n_checked else 0
+            improvement = best_matches - current_matches
+
+            if best_offset != 0 and n_checkable > 0 and improvement > max(5, 0.05 * n_checkable):
+                best_pct = 100 * best_matches / n_checkable
+                print(f'  Possible offset detected: {best_offset:+d} '
+                      f'(identity {identity_pct:.0f}% → {best_pct:.0f}%)')
+                choice, ok = QInputDialog.getItem(
+                    parent, 'Residue Number Offset Detected',
+                    f'Applying an offset of {best_offset:+d} to score-file positions\n'
+                    f'improves sequence identity from {identity_pct:.0f}% → {best_pct:.0f}%.\n\n'
+                    f'This commonly happens when the PDB model starts at a different\n'
+                    f'residue than the canonical sequence (e.g. signal peptide removed).\n\n'
+                    f'Apply offset {best_offset:+d}?',
+                    ['Yes — apply offset', 'No — continue without offset'],
+                    0, False)
+                if ok and choice.startswith('Yes'):
+                    normalized_values = {pos + best_offset: val
+                                         for pos, val in normalized_values.items()}
+                    ref_aa_by_pos     = {pos + best_offset: aa
+                                         for pos, aa in ref_aa_by_pos.items()}
+                    # Confirm identity after offset
+                    common_off = set(normalized_values) & set(chain_residue_map)
+                    n_mis_off = 0
+                    for pos in common_off:
+                        ref_1l = ref_aa_by_pos.get(pos)
+                        exp    = AA_ONE_TO_THREE.get(ref_1l) if ref_1l else None
+                        if exp and chain_residue_map[pos] != exp:
+                            n_mis_off += 1
+                    n_off = len(common_off)
+                    id_off = 100 * (n_off - n_mis_off) / n_off if n_off else 0
+                    cov_off = 100 * n_off / n_scored if n_scored else 0
+                    print(f'  After offset {best_offset:+d}: {n_off - n_mis_off}/{n_off} '
+                          f'positions match ({id_off:.0f}%)')
+                    # Clear serious_issue if both coverage and identity are now acceptable
+                    if id_off >= 80 and cov_off >= 50:
+                        serious_issue = False
+            else:
+                print('  No offset improvement found.')
+
+        # --- Gate coloring on validation result ---
+        if serious_issue:
+            proceed, ok = QInputDialog.getItem(
+                parent, 'Validation Failed — Skip Coloring?',
+                f'Serious issues were found for chain {chain_id} (see log above).\n\n'
+                f'Coverage: {coverage_pct:.0f}%   |   '
+                f'Sequence identity: {identity_pct:.0f}%\n\n'
+                f'Coloring with bad data will produce a misleading result.\n'
+                f'Proceed anyway?',
+                ['No — skip this chain', 'Yes — color anyway (not recommended)'],
+                0, False)
+            if not ok or proceed.startswith('No'):
+                print(f'Skipping coloring for chain {chain_id}.')
+                continue
 
         print('Applying colors in ChimeraX...')
         print(f'Coloring chain {chain_id} based on {analysis_type} SGE scores...')
