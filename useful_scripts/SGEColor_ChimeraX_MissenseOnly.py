@@ -133,7 +133,21 @@ def read_scores(file, parent, rna_score_threshold=None): #Reads score file
         score_column = score_col  # keep legend label in sync
 
     df = df.rename(columns={consequence_col: 'Consequence', aa_change_col: 'AAsub', score_col: 'snv_score'})
-    df = df.loc[df['Consequence'].str.contains('missense_variant')] #Filters only for missense variants
+
+    missense_filter = 'missense_variant'
+    if not df['Consequence'].str.contains(missense_filter).any():
+        unique_consequences = sorted(df['Consequence'].dropna().unique().tolist())
+        chosen, ok = QInputDialog.getItem(
+            parent,
+            'Missense Label Not Found',
+            f'No rows containing "{missense_filter}" were found in the consequence column.\n\n'
+            f'Select how missense variants are labelled in your dataset:',
+            unique_consequences, 0, False)
+        if not ok:
+            raise ValueError('Missense variant label not specified — aborting.')
+        missense_filter = chosen
+
+    df = df.loc[df['Consequence'].str.contains(missense_filter, regex=False)]
 
     if rna_score_threshold is not None: #Optionally filter out variants below the RNA score threshold; NaN rows are kept
         rna_col = next((c for c in df.columns if c in ('RNA_score', 'RNAscore')), None)
