@@ -415,6 +415,10 @@ def get_score_config(session):
         if ok:
             clamp_max = cmax
 
+        if clamp_min > clamp_max:
+            clamp_min, clamp_max = clamp_max, clamp_min
+            print(f'  Note: min > max — values swapped to [{clamp_min}, {clamp_max}].')
+
         # Color direction
         direction, ok = QInputDialog.getItem(
             parent, 'Color Direction',
@@ -676,11 +680,8 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
             for residue, value in normalized_values.items():
                 if residue in mismatch_positions:
                     continue
-                if value == 1:
-                    hex_color = '#ffffff'
-                else:
-                    color = get_color(value) #Gets color from color map
-                    hex_color = rgb_to_hex(color[0], color[1], color[2])
+                color = get_color(value) #Gets color from color map
+                hex_color = rgb_to_hex(color[0], color[1], color[2])
                 run(session, f'color /{chain_id}:{residue} {hex_color} target abcs') #Colors cartoons, atoms, and surface
 
             # Print deferred validation summary now that coloring output has finished
