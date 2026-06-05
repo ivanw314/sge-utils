@@ -3,7 +3,7 @@ SGEColor_ChimeraX_MissenseOnly.py
 ==================================
 Colors a protein ribbon structure in ChimeraX by per-residue SGE (Saturating Genome Editing)
 scores, using only missense variants. Scores are aggregated per amino acid position and mapped
-onto a white (benign/neutral) → red (damaging) color scale clamped to [-0.2, 0].
+onto a color scale (white ↔ red) whose range and direction are configurable.
 
 USAGE
 -----
@@ -18,7 +18,7 @@ INTERACTIVE DIALOGS (shown at runtime)
                      Supported formats: .xlsx (must contain a sheet named 'scores'),
                      .tsv (tab-separated), .csv (comma-separated).
                      Required columns: variant_qc_flag, consequence,
-                       amino_acid_change, score
+                       amino_acid_change, <score_column>
                      RNA_score (optional column) used by RNA filter below
 3. Chain selection — dropdown populated from the chains in the loaded structure.
 4. RNA filter      — (optional) enter a numeric threshold to exclude variants
@@ -35,6 +35,11 @@ the surface first, run in the ChimeraX command line or select "Show" under "Surf
 CONFIGURATION (edit at top of script)
 ---------------------------------------
   analysis_type  'med' | 'mean' | 'min'   Aggregation method per residue (default: 'med')
+  score_column   str                       Column name in the score file to use (default: 'score')
+  clamp_min      float                     Lower bound of the color normalization range (default: -0.2)
+  clamp_max      float                     Upper bound of the color normalization range (default: 0)
+  high_is_red    True | False              If True, high scores → red, low → white.
+                                           If False (default), high scores → white, low → red.
   show_legend    True | False              Show colorbar legend window (default: False)
   save_legend    True | False              Prompt to save legend as PNG (default: False)
   dna_style      'stubs'|'slab'|'fill'    ssDNA display style (default: 'stubs')
@@ -60,10 +65,14 @@ import matplotlib.cm as cm
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 
-analysis_type = 'med' #Specify whether to color based on 'med', 'mean', or 'min' SGE scores
-show_legend = False #Whether to show the legend figure
-save_legend = False #Whether to save the legend figure
-dna_style = 'stubs' #ssDNA display style: 'stubs', 'slab', 'fill', or 'atoms'. ('ladder' requires dsDNA and won't work here)
+analysis_type = 'med'   # 'med', 'mean', or 'min' — aggregation method per residue
+score_column  = 'score' # column in the score file to use for coloring
+clamp_min     = -0.2    # lower bound for color normalization range
+clamp_max     = 0.0     # upper bound for color normalization range
+high_is_red   = False   # False → high score = white, low = red (default); True → high = red, low = white
+show_legend = False     # whether to show the legend figure
+save_legend = False     # whether to save the legend figure
+dna_style = 'stubs'     # ssDNA display style: 'stubs', 'slab', 'fill', or 'atoms'
 
 
 def read_scores(file, rna_score_threshold=None): #Reads score file
@@ -78,7 +87,9 @@ def read_scores(file, rna_score_threshold=None): #Reads score file
         raise ValueError(f'Unsupported file type: {ext}. Use .xlsx, .tsv, or .csv')
 
     df = df.loc[df['variant_qc_flag'] != 'WARN'] #Filters out variants with WARN flag
-    df = df.rename(columns={'consequence': 'Consequence', 'amino_acid_change': 'AAsub', 'score': 'snv_score'})
+    if score_column not in df.columns:
+        raise ValueError(f"score_column '{score_column}' not found. Available columns: {df.columns.tolist()}")
+    df = df.rename(columns={'consequence': 'Consequence', 'amino_acid_change': 'AAsub', score_column: 'snv_score'})
     df = df.loc[df['Consequence'].str.contains('missense_variant')] #Filters only for missense variants
 
     if rna_score_threshold is not None: #Optionally filter out variants below the RNA score threshold; NaN rows are kept
@@ -117,20 +128,16 @@ def group_scores(df): #Groups variant scores by AA position and creates calculat
 
 
 def normalize_values(values): #Normalizes all values between 0 and 1 for coloring
-    # First clamp all values between 0 and 1
-    clamped_values = {k: min(max(v, -0.2), 0) for k, v in values.items()}
+    # Clamp all values to [clamp_min, clamp_max]
+    clamped_values = {k: min(max(v, clamp_min), clamp_max) for k, v in values.items()}
     clamped_values = {k: v for k, v in clamped_values.items() if not pd.isna(v)} #Filters out NA values
 
-    # Get min and max of clamped values
-    min_val = min(clamped_values.values())
-    max_val = max(clamped_values.values())
-
     # Avoid division by zero if all values are the same
-    if max_val == min_val:
-        return {k: 0 for k in values.keys()}
+    if clamp_max == clamp_min:
+        return {k: 0 for k in clamped_values.keys()}
 
     # Perform normalization
-    return {k: (v - min_val) / (max_val - min_val) for k, v in clamped_values.items()}
+    return {k: (v - clamp_min) / (clamp_max - clamp_min) for k, v in clamped_values.items()}
 
 
 AA_ONE_TO_THREE = {
@@ -146,36 +153,91 @@ cmap_name = 'gray_to_red'
 custom_cmap = LinearSegmentedColormap.from_list(cmap_name, colors, N=n_bins) #makes the color map
 
 def create_colorbar_legend():
-    # Create figure with horizontal proportions
     fig, ax = plt.subplots(figsize=(1, 0.5))
     fig.subplots_adjust(bottom=0.5)
 
-    # Reverse the colormap to match your get_color inversion
-    reversed_cmap = custom_cmap.reversed()
+    # Match the colormap direction used by get_color
+    legend_cmap = custom_cmap if high_is_red else custom_cmap.reversed()
 
-    # Now use normal ordering since we reversed the colormap
-    norm = plt.Normalize(vmin=-0.2, vmax=0)
-    sm = cm.ScalarMappable(cmap=reversed_cmap, norm=norm)
+    norm = plt.Normalize(vmin=clamp_min, vmax=clamp_max)
+    sm = cm.ScalarMappable(cmap=legend_cmap, norm=norm)
     sm.set_array([])
 
-    # Create horizontal colorbar
     cbar = plt.colorbar(sm, cax=ax, orientation='horizontal')
-
-    # Labels now directly correspond to your data range
-    cbar.set_ticks([-0.2, 0])
-    cbar.set_label('Score', labelpad=10)
+    cbar.set_ticks([clamp_min, clamp_max])
+    cbar.set_label(score_column, labelpad=10)
 
     if show_legend:
         plt.show()
     return fig
 
 
-def get_color(value): #Gets color for each residue from mean score
-    return custom_cmap(1 - value) #Inverts the colors, White is high score and Red is low
+def get_color(value): #Gets color for each residue from score
+    # high_is_red=False (default): high value → white, low → red  (invert lookup)
+    # high_is_red=True:            high value → red,   low → white (normal lookup)
+    return custom_cmap(value if high_is_red else 1 - value)
 
 
 def rgb_to_hex(r, g, b): #Converts float RGB (0-1) to hex string for ChimeraX
     return '#{:02x}{:02x}{:02x}'.format(int(r * 255), int(g * 255), int(b * 255))
+
+
+def get_score_config(session):
+    """Ask aggregation method (always), then optionally override score_column / clamp range / color direction."""
+    global analysis_type, score_column, clamp_min, clamp_max, high_is_red
+    parent = session.ui.main_window
+
+    # Aggregation method — always asked
+    agg_choice, ok = QInputDialog.getItem(
+        parent, 'Aggregation Method',
+        'How should per-residue scores be aggregated across variants?',
+        ['Median', 'Mean', 'Minimum'],
+        ['med', 'mean', 'min'].index(analysis_type), False)
+    if ok:
+        analysis_type = {'Median': 'med', 'Mean': 'mean', 'Minimum': 'min'}[agg_choice]
+
+    mode, ok = QInputDialog.getItem(
+        parent, 'Score Settings',
+        'Which score settings would you like to use?',
+        [f'Default  (column: "{score_column}",  range: {clamp_min} to {clamp_max},  white = high score)',
+         'Custom score column / range / color direction'],
+        0, False)
+    if not ok or mode.startswith('Default'):
+        return  # keep hardcoded defaults for remaining settings
+
+    # Score column
+    col, ok = QInputDialog.getText(
+        parent, 'Score Column',
+        'Score column name in the input file:',
+        text=score_column)
+    if ok and col.strip():
+        score_column = col.strip()
+
+    # Clamp range — min
+    cmin, ok = QInputDialog.getDouble(
+        parent, 'Color Range — Minimum',
+        'Lower bound for color normalization\n(values below this are clamped to this color):',
+        clamp_min, -1e6, 1e6, 4)
+    if ok:
+        clamp_min = cmin
+
+    # Clamp range — max
+    cmax, ok = QInputDialog.getDouble(
+        parent, 'Color Range — Maximum',
+        'Upper bound for color normalization\n(values above this are clamped to this color):',
+        clamp_max, -1e6, 1e6, 4)
+    if ok:
+        clamp_max = cmax
+
+    # Color direction
+    direction, ok = QInputDialog.getItem(
+        parent, 'Color Direction',
+        'Which end of the score range should be red?',
+        ['White = high score  /  Red = low score',
+         'Red = high score  /  White = low score'],
+        0, False)
+    if ok:
+        high_is_red = direction.startswith('Red')
 
 
 def get_gene_configs(session, available_chains):
@@ -210,6 +272,8 @@ def get_gene_configs(session, available_chains):
 
 def main():  # 'session' is injected as a global by ChimeraX at runtime via runscript
     parent = session.ui.main_window
+
+    get_score_config(session)  # optionally override score_column / clamp range / color direction
 
     legend = create_colorbar_legend()
     if save_legend:
