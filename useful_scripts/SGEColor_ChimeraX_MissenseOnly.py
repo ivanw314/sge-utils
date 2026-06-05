@@ -348,16 +348,7 @@ def get_gene_configs(session, available_chains):
 def main():  # 'session' is injected as a global by ChimeraX at runtime via runscript
     parent = session.ui.main_window
 
-    get_score_config(session)  # optionally override score_column / clamp range / color direction
-
-    legend = create_colorbar_legend()
-    if save_legend:
-        save_path, _ = QFileDialog.getSaveFileName(parent, 'Save Legend', '', 'PNG Files (*.png)')
-        if save_path:
-            legend.savefig(save_path, dpi=500)
-    if not show_legend:
-        plt.close(legend)  # not displayed — discard immediately so it doesn't accumulate
-
+    # Load structure first so the user has it in view while configuring score settings
     existing_models = session.models.list()
     if not existing_models:
         pdb_id, ok = QInputDialog.getText(parent, 'Load Structure', 'Enter PDB ID:')
@@ -379,6 +370,16 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
             run(session, f'nucleotides {dna_style}')  #Show ssDNA bases (stubs/slab/fill)
     else:
         print(f'Existing session detected ({len(existing_models)} model(s) open). Skipping structure load — applying colors only.')
+
+    get_score_config(session)
+
+    legend = create_colorbar_legend()
+    if save_legend:
+        save_path, _ = QFileDialog.getSaveFileName(parent, 'Save Legend', '', 'PNG Files (*.png)')
+        if save_path:
+            legend.savefig(save_path, dpi=500)
+    if not show_legend:
+        plt.close(legend)  # not displayed — discard immediately so it doesn't accumulate
 
     models = session.models.list()
     available_chains = sorted(set(c.chain_id for m in models if hasattr(m, 'chains') for c in m.chains))
