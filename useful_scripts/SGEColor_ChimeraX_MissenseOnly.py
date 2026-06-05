@@ -433,7 +433,8 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
         if common:
             range_ok, ok = QInputDialog.getItem(
                 parent, 'Check Residue Range',
-                f'Scored positions matched chain {chain_id} residues {min(common)}–{max(common)}.\n'
+                f'Scored positions matched chain {chain_id} residues {min(common)}–{max(common)}\n'
+                f'({len(common)} of {max(common) - min(common) + 1} residues in that range scored).\n\n'
                 f'Does this range look correct?',
                 ['Yes — continue', 'No — skip this chain'],
                 0, False)
