@@ -95,7 +95,24 @@ save_legend = False     # whether to save the legend figure
 dna_style = 'stubs'     # ssDNA display style: 'stubs', 'slab', 'fill', or 'atoms'
 
 
-def read_scores(file, rna_score_threshold=None): #Reads score file
+def resolve_column(df, expected_name, description, parent):
+    """Return expected_name if present; otherwise show a picker so the user can select the right column."""
+    if expected_name in df.columns:
+        return expected_name
+    chosen, ok = QInputDialog.getItem(
+        parent,
+        f'Column Not Found: "{expected_name}"',
+        f'Expected column "{expected_name}" ({description})\n'
+        f'was not found in this file.\n\n'
+        f'Select the column that corresponds to it:',
+        df.columns.tolist(), 0, False)
+    if not ok:
+        raise ValueError(f'Required column "{expected_name}" not found and not remapped — aborting.')
+    return chosen
+
+
+def read_scores(file, parent, rna_score_threshold=None): #Reads score file
+    global score_column
     ext = os.path.splitext(file)[1].lower()
     if ext == '.xlsx':
         df = pd.read_excel(file, sheet_name='scores')
@@ -108,24 +125,21 @@ def read_scores(file, rna_score_threshold=None): #Reads score file
 
     if 'variant_qc_flag' in df.columns:
         df = df.loc[df['variant_qc_flag'] != 'WARN'] #Filters out variants with WARN flag
-    if score_column not in df.columns:
-        raise ValueError(f"score_column '{score_column}' not found. Available columns: {df.columns.tolist()}")
-    df = df.rename(columns={'consequence': 'Consequence', 'amino_acid_change': 'AAsub', score_column: 'snv_score'})
+
+    consequence_col = resolve_column(df, 'consequence',       'identifies missense variants', parent)
+    aa_change_col   = resolve_column(df, 'amino_acid_change', 'format: one-letter ref AA + position + alt AA, e.g. A123G', parent)
+    score_col       = resolve_column(df, score_column,        'numeric score used for coloring', parent)
+    if score_col != score_column:
+        score_column = score_col  # keep legend label in sync
+
+    df = df.rename(columns={consequence_col: 'Consequence', aa_change_col: 'AAsub', score_col: 'snv_score'})
     df = df.loc[df['Consequence'].str.contains('missense_variant')] #Filters only for missense variants
 
     if rna_score_threshold is not None: #Optionally filter out variants below the RNA score threshold; NaN rows are kept
-
-        columns = df.columns.tolist()
-        if 'RNA_score' in columns:
-            df = df.loc[df['RNA_score'].isna() | (df['RNA_score'] >= rna_score_threshold)]
-        elif 'RNAscore' in columns:
-            df = df.loc[df['RNAscore'].isna() | (df['RNAscore'] >= rna_score_threshold)]
-        else:
-            raise ValueError(
-                "rna_score_threshold was specified but neither 'RNA_score' nor 'RNAscore' "
-                "column was found in the score file. Available columns: "
-                + str(columns)
-            )
+        rna_col = next((c for c in df.columns if c in ('RNA_score', 'RNAscore')), None)
+        if rna_col is None:
+            rna_col = resolve_column(df, 'RNA_score', 'RNA score used for optional filtering', parent)
+        df = df.loc[df[rna_col].isna() | (df[rna_col] >= rna_score_threshold)]
 
     df['AApos'] = df['AAsub'].transform(lambda x: int(x[1:-1])) #Creates new amino acid position column
 
@@ -360,7 +374,7 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
     for file_path, chain_id, rna_score_threshold in gene_configs:
         label = os.path.basename(file_path)
         print(f'Reading SGE scores from {label}...')
-        raw_scores = read_scores(file_path, rna_score_threshold)
+        raw_scores = read_scores(file_path, parent, rna_score_threshold)
         ref_aa_by_pos = raw_scores.drop_duplicates('AApos').set_index('AApos')['AAsub'].apply(lambda x: x[0]).to_dict()
 
         print('Grouping scores by residue...')
