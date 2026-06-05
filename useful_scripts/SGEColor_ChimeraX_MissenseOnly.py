@@ -378,6 +378,7 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
         # Amino-acid identity
         n_checked = n_mismatched = 0
         identity_pct = 0.0
+        mismatch_positions = set()
         mismatch_details = []
         for pos in sorted(common):
             ref_1letter = ref_aa_by_pos.get(pos)
@@ -387,6 +388,7 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
                 n_checked += 1
                 if actual != expected:
                     n_mismatched += 1
+                    mismatch_positions.add(pos)
                     mismatch_details.append(
                         f'  pos {pos}: score file expects {ref_1letter} ({expected}), chain has {actual}')
 
@@ -432,14 +434,16 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
                                          for pos, val in normalized_values.items()}
                     ref_aa_by_pos     = {pos + best_offset: aa
                                          for pos, aa in ref_aa_by_pos.items()}
-                    # Confirm identity after offset
+                    # Confirm identity after offset; rebuild mismatch_positions for coloring
                     common_off = set(normalized_values) & set(chain_residue_map)
+                    mismatch_positions = set()
                     n_mis_off = 0
                     for pos in common_off:
                         ref_1l = ref_aa_by_pos.get(pos)
                         exp    = AA_ONE_TO_THREE.get(ref_1l) if ref_1l else None
                         if exp and chain_residue_map[pos] != exp:
                             n_mis_off += 1
+                            mismatch_positions.add(pos)
                     n_off = len(common_off)
                     id_off = 100 * (n_off - n_mis_off) / n_off if n_off else 0
                     cov_off = 100 * n_off / n_scored if n_scored else 0
@@ -475,8 +479,10 @@ def main():  # 'session' is injected as a global by ChimeraX at runtime via runs
             run(session, f'hide /{chain_id} & protein bonds')     #Hides bond/stick representation for protein only
         run(session, f'color /{chain_id} & protein gray target abcs') #Colors protein residues grey first (cartoons, atoms, surface), excludes pseudobonds (e.g. H-bonds)
 
-        #this block does the coloring
+        #this block does the coloring; mismatched positions are left gray
         for residue, value in normalized_values.items():
+            if residue in mismatch_positions:
+                continue
             if value == 1:
                 hex_color = '#ffffff'
             else:
