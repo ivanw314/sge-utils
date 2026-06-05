@@ -266,6 +266,7 @@ runscript /path/to/SGEColor_ChimeraX_MissenseOnly.py
 | 3 | Score settings | Default or custom: score column, color range, color direction |
 | 4 | Colorbar legend | Don't show / show / show and save |
 | 5 | SGE score file | File picker; accepts `.xlsx`, `.tsv`, `.csv` |
+| — | Sheet selection | Shown for multi-sheet `.xlsx` files; `scores` pre-selected if present |
 | 6 | Chain selection | Dropdown of chains in the loaded structure |
 | 7 | RNA score filter | Optional — cancel to skip |
 | 8 | Add another? | Repeat steps 5–7 for additional chains |
@@ -276,12 +277,12 @@ runscript /path/to/SGEColor_ChimeraX_MissenseOnly.py
 
 **Score file format:**
 
-Accepted file types: `.xlsx` (sheet must be named `scores`), `.tsv`, `.csv`
+Accepted file types: `.xlsx`, `.tsv`, `.csv`. For `.xlsx` files with multiple sheets a picker dialog appears; the sheet named `scores` is pre-selected if present.
 
 | Column | Required | Description |
 |---|---|---|
 | `consequence` | Yes | Rows containing `'missense_variant'` are kept; other rows ignored |
-| `amino_acid_change` | Yes | One-letter ref AA + position + alt AA (e.g. `A123G`, `R45W`) |
+| `amino_acid_change` | Yes | Amino acid substitution — accepts `A123G`, `p.Met123Val`, `NP_xxx:p.Met123Lys`, and other standard HGVS forms |
 | `score` | Yes (default name) | Numeric score used for coloring; name is configurable |
 | `variant_qc_flag` | No | Rows where this equals `'WARN'` are excluded if the column exists |
 | `RNA_score` / `RNAscore` | No | Used by the optional RNA score filter |
@@ -290,7 +291,7 @@ If any required column name differs in your dataset, a picker dialog appears aut
 
 **Validation:**
 
-For each chain, the script checks coverage (how many scored positions are found in the structure) and sequence identity (whether the reference amino acid in the score file matches the PDB residue at each position). A residue range confirmation dialog is shown before coloring. If identity is imperfect, an automatic scan for a residue number offset is run (common when the PDB starts at a different residue than the canonical sequence, e.g. after signal peptide removal). Positions with amino acid mismatches are always left gray. Coloring is blocked by default if identity is below 80% and no offset corrects it. A validation summary is printed to the log after coloring finishes.
+For each chain, the script checks coverage (how many scored positions are found in the structure) and sequence identity (whether the reference amino acid in the score file matches the PDB residue at each position). A residue range confirmation dialog is shown before coloring. If identity is imperfect, an automatic scan for a residue number offset is run (common when the PDB starts at a different residue than the canonical sequence, e.g. after signal peptide removal). Non-standard residues in the structure (e.g. MSE, SEP, TPO, HYP) are mapped to their canonical parent amino acid before comparison so they do not inflate the mismatch count. Positions with amino acid mismatches are always left gray. Coloring is blocked by default if identity is below 80% and no offset corrects it. A validation summary is printed to the log after coloring finishes.
 
 **Configuration** (edit at top of script; all settings are also available via the GUI):
 

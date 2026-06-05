@@ -12,15 +12,22 @@ In the ChimeraX command line:
 
 INPUT FILE FORMAT
 ------------------
-Supported file types: .xlsx (sheet must be named 'scores'), .tsv, .csv
+Supported file types: .xlsx, .tsv, .csv
+  For .xlsx: if the file has multiple sheets, a picker dialog is shown;
+             the sheet named 'scores' is pre-selected if present.
 
 Required columns:
   consequence        str    Only rows containing 'missense_variant' are kept.
-  amino_acid_change  str    One-letter ref AA + integer position + one-letter alt AA.
-                            Examples: 'A123G' (Ala→Gly at position 123),
-                                      'R45W'  (Arg→Trp at position 45).
-                            The ref AA (first character) is used to verify the
-                            sequence matches the selected PDB chain.
+  amino_acid_change  str    Amino acid substitution in any of these formats:
+                              A123G             (one-letter shorthand)
+                              p.A123G           (HGVS one-letter)
+                              p.Met123Val       (HGVS three-letter)
+                              p.Met123V         (HGVS mixed)
+                              NP_009225.1:p.Met123Lys  (accession-prefixed HGVS)
+                            The ref AA is used to verify the sequence matches
+                            the selected PDB chain. Non-standard residues in
+                            the structure (e.g. MSE, SEP, TPO) are mapped to
+                            their canonical equivalents before comparison.
   <score_column>     float  Numeric score used for coloring. Column name is set by
                             the score_column config variable (default: 'score').
 
@@ -44,6 +51,7 @@ Shown once per run:
 
 Repeated per gene/chain:
   5. SGE score file   — file picker; accepts .xlsx, .tsv, .csv.
+     Sheet selection  — shown immediately after for multi-sheet .xlsx files.
   6. Chain selection  — dropdown of chains in the loaded structure.
   7. RNA filter       — optional threshold; cancel to skip.
   8. Add another?     — repeat steps 5–7 for additional chains.
