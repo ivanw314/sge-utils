@@ -4,8 +4,9 @@ set -euo pipefail
 
 input=""
 output=""
+gene=""
 
-while getopts "i:o:" flag; do
+while getopts "i:o:g:" flag; do
     case "$flag" in
         i) input=$OPTARG ;;
         o) output=$OPTARG ;;
