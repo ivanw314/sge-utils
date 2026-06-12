@@ -9,7 +9,7 @@ while getopts "i:o:" flag; do
     case "$flag" in
         i) input=$OPTARG ;;
         o) output=$OPTARG ;;
-        g) gene=$OPTARG
+        g) gene=$OPTARG ;;
         ?) echo "Usage ./GetEditRates.sh -i input_directory -o output_directory" ; exit 1 ;;
     esac
 done
