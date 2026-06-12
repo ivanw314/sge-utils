@@ -9,6 +9,7 @@ while getopts "i:o:" flag; do
     case "$flag" in
         i) input=$OPTARG ;;
         o) output=$OPTARG ;;
+        g) gene=$OPTARG
         ?) echo "Usage ./GetEditRates.sh -i input_directory -o output_directory" ; exit 1 ;;
     esac
 done
@@ -46,11 +47,11 @@ check_files "${inputs[@]}"
 log "Inputs checked"
 
 log "Grabbing gene name and date from input"
-gene_name=$(echo "$input" | cut -d'.' -f2)
+gene_name="$gene"
 sample_date=$(echo "$input" | cut -d'/' -f8 | cut -d'.' -f1)
 
 input_directory="${input}/${gene_name}_X*_R*_D05*readstats.tsv"
-output_file="${output}/${sample_date}_${gene_name}.editrates.tsv"
+output_file="${output}/${gene_name}.editrates.tsv"
 
 log "Writing edit rate file"
 shopt -s nullglob
